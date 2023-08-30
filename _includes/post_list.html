@@ -1,0 +1,12 @@
+{% if site.posts.size > 0 %}
+  <ul>
+    {% for post in site.posts %}
+      <li class="post-list-item">
+        <a href="{{ post.url | relative_url }}">{{ post.title }}</a>
+        <span class="home-date" style="float: right; position: relative; line-height: 35px; font-size: 15px">
+          {{ post.date | date: site.theme_config.date_format }}
+        </span>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}

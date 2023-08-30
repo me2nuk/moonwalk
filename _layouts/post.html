@@ -1,0 +1,19 @@
+---
+layout: default
+---
+
+<a href="{{ "/" | relative_url }}">{{ site.theme_config.back_home_text }}</a>
+<h1 class="post-title">{{ page.title }}</h1>
+{% include date_and_social_share.html %}
+{{ content }}
+
+<br><br>
+
+<script src="https://utteranc.es/client.js"
+        repo="me2nuk/moonwalk"
+        issue-term="pathname"
+        label="Comments"
+        theme="github-dark"
+        crossorigin="anonymous"
+        async>
+</script>
