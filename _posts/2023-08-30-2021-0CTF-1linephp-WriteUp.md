@@ -2,6 +2,6 @@
 layout: post
 author: me2nuk
 title: 0CTF/1CTF 1linephp Write-Up and Analysis
-tags: [1-Day,django]
+tags: [CTF,PHP]
 ---
 

@@ -139,6 +139,7 @@ p, strong, b, em, small, li, hr, table, figcaption {
   border-radius: 0.5em;
 }
 blockquote {
+  margin-left:0px;
   background-color: var(--bg-secondary);
   border: 1px var(--border) solid;
 }
