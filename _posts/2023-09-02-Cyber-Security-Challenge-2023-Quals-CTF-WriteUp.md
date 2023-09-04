@@ -20,10 +20,7 @@ CVE-2021-21263, CVE-2021-3129으로 인해 Array Parameter으로 보면 잘못�
 ```json
 [{"id":2,"name":"Leonie Runte","email":"elouise.dubuque@example.net","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false},{"id":3,"name":"Mose Metz","email":"dora65@example.com","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false},{"id":4,"name":"Dr. Dameon Runte","email":"valtenwerth@example.org","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false},{"id":5,"name":"Dr. Clifford Metz","email":"destany.bartoletti@example.com","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false},{"id":6,"name":"Shana Kertzmann","email":"rwiegand@example.org","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false},{"id":7,"name":"Betty Kulas","email":"nienow.cielo@example.net","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false},{"id":8,"name":"Sabrina McLaughlin PhD","email":"predovic.elyssa@example.org","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false},{"id":9,"name":"Stefanie Halvorson","email":"lorine71@example.org","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false},{"id":10,"name":"Sanford Boyer","email":"clifford45@example.net","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false},{"id":11,"name":"Rubye Schultz","email":"rick.kemmer@example.net","email_verified_at":"2023-08-03T08:34:51.000000Z","created_at":"2023-08-03T08:34:51.000000Z","updated_at":"2023-08-03T08:34:51.000000Z","is_admin":false}]
 ```
-
 /user GET 요청 관련 파일을 찾아보면 laravel/routes/web.php에 아래와 같이 is_admin이 false인 데이터만 출력을 하게 됩니다. 
-
-id가 1이 아니라 2부터 시작하는 것을 보고 id가 1인 것을 읽으면 FLAG가 나올 것으로 예상 합니다.
 
 ```php
 Route::get('/', function () {
@@ -43,7 +40,37 @@ Route::get('/user', function () {
 });
 ```
 
-그러면 다른 파일들도 살펴보면 아래와 같이 ``flattenValue`` 메서드와 bindings 관련 변수를 추가한 패치를 볼 수 있습니다.
+또한 ``/laravel/database/seeders/Userseeder.php`` 파일에서 /user에 나오지 않은 FLAG가 User에 존재합니다.
+
+```php
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+
+class UserSeeder extends Seeder
+{
+    /**
+     * Run the database seeds.
+     */
+    public function run(): void
+    {
+        \App\Models\User::factory()->create([
+            'name' => 'admin',
+            'email' => 'FLAG{THIS_IS_FAKE_FLAG}',
+            'password' => Hash::make('FLAG{THIS_IS_FAKE_FLAG}'),
+            'is_admin' => true,
+        ]);
+
+        \App\Models\User::factory(10)->create();
+    }
+}
+
+```
+
+그러면 다른 파일들도 살펴보면 아래와 같이 ``flattenValue`` 메서드와 bindings 관련 변수를 추가한 패치 로그가 존재합니다.
 
 
 #### p1.patch file
@@ -97,11 +124,11 @@ Route::get('/user', function () {
 
 #### FLAG : ``FLAG{Wh3Re_15_mY_hARd_c0DED_v4Lu3}``
 
-# SmartGridAdmin / Smart Grid
+# Smart Parking Coupon / Smart Grid
 
 > 지능형 전력망 관리를 위한 관리자 페이지 코드가 유출되었다. 하지만 난독화가 되어있다고 하여 유출되어도 상관없다는데.. 해당 코드를 분석하여 위험함을 증명하자.
 
-페이지에 들어가면 로그인 창이 나오는 것을 볼 수 있습니다.
+페이지에 들어가면 로그인 창이 나옵니다.
 
 ![](../assets/posts/2023-09-02-02-28-47.png)
 
@@ -173,7 +200,7 @@ fetch("http://3.37.65.109:31991/login.php", {
 
 SSRF 취약점을 이용하여 PublicApp에서는 제한된 DataList 조회가 InternalApp으로 요청하면 DataList 제한을 풀면서 Flag를 얻을 수 있게 됩니다.
 
-파일 구조를 살펴보면 아래와 같이 Challenge.dll 파일이 나오게 됩니다.
+파일 구조를 살펴보면 아래와 같이 Challenge.dll 파일이 존재합니다.
 
 ```
 .
@@ -214,7 +241,7 @@ SSRF 취약점을 이용하여 PublicApp에서는 제한된 DataList 조회가 I
 
 ### Init Analysis
 
-먼저 Init 함수에서는 flag 파일을 읽은 다음, Type은 Data.DatType.Admin으로 지정하고 Value에 플래그를 넣은 다음, DataDb에 저장하게 됩니다.
+먼저 Init 함수에서는 flag 파일을 읽은 다음, Type은 Data.DatType.Admin으로 지정하고 Value에 플래그를 넣은 다음, DataDb에 저장합니다.
 
 ```cs
 internal static void Init()
@@ -235,7 +262,7 @@ internal static void Init()
 		Console.WriteLine("Fail to init. Please contact to admin");
 		Environment.Exit(1);
 	}
-	context.Add<Data>(flagData);
+	context.Add<Data>(flagData); // flag add
 	context.SaveChanges();
 }
 ```
@@ -339,7 +366,7 @@ private struct <<StartPublicApp>b__2_3>d : IAsyncStateMachine
 			TaskAwaiter<List<ulong>> awaiter;
 			if (num != 0)
 			{
-				awaiter = (from d in this.db.DataList
+				awaiter = (from d in this.db.DataList // LINQ Query
 				where (int)d.Type == 2 // point
 				select d.Key).ToListAsync(default(CancellationToken)).GetAwaiter();
 				if (!awaiter.IsCompleted)

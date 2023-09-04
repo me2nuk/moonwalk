@@ -62,6 +62,7 @@ table, th, td {
 div.highlighter-rouge pre code, pre code.highlighter-rouge {
   display: block;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 1em;
 }
 
