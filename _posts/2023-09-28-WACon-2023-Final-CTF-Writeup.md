@@ -9,6 +9,10 @@ tags: [CTF]
 
 ### TL;DR
 
+> JavaScript의 Function 생성자 함수에서 값을 처리할때 발생하는 예외와 JS 스크립트에서 인식하는 예외의 차이의 다름을 이용한 챌린지입니다.
+
+### Description
+
 > do you like js?
 
 ### Analysis
@@ -264,6 +268,10 @@ webhook을 확인해보면 성공적으로 FLAG 쿠키를 읽어온 것을 볼 �
 # [WEB] Cha's eval
 
 ### TL;DR
+
+> Eval Hooking 또는 CSP Bypass를 이용한 챌린지입니다.
+
+### Description
 
 > Do you know how JS eval() works? Then, how about these comments?
 > 
