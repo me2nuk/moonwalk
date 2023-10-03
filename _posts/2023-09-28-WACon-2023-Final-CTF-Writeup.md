@@ -628,9 +628,33 @@ if(tester === 0) {
 ![eval_hooking_eaxmple.png](/images/posts/wacon-final-writeup/eval_hooking_example.png) 
 
 
-그렇다면 func.caller.toString()을 이용한다면 tester === 0 조건을 무시하더라도 이미 tester = 1을 실행하는 eval과 FLAG가 담겨 있는 eval과 같은 함수 위치에 있기 때문에
+func.caller.toString()을 이용한다면 tester === 0 조건을 무시하고 아래 코드와 같이 이미 tester = 1을 실행하는 eval과 FLAG가 담겨 있는 eval과 같은 함수 위치에 있기 때문에
 
-한 번 실행 될 떄 마다 tester = 1을 실행하게 한 상위 함수 코드를 가져와 FLAG를 추출하면 됩니다.
+```js
+window.setTimeout(() => {
+                    
+    let tester = 0, tmp = 0;
+    <?php for($i = 0; $i < strlen($FLAG); $i++) { ?>
+                    
+    [ ... ]
+
+    // never pollute eval
+    tester = 0;
+    eval("tester = 1");
+    if(tester === 0) {
+        return;
+    }
+                    
+    // no winning race
+    [ ... ]
+
+    eval("////////////////////////////////////////$flag[<?= $i ?>] = <?= $FLAG[$i] ?>"); 
+    <?php } ?>
+
+}, 2000); // 2000ms delay
+```
+
+한 번 실행 될 떄 마다 tester = 1을 실행한 상위의 함수 코드를 가져와 FLAG를 추출하면 됩니다.
 
 ```js
 org_eval = eval;
