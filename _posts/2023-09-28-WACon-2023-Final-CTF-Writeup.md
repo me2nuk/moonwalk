@@ -625,7 +625,7 @@ if(tester === 0) {
 
 하지만 ``func.caller.toString()``의 결과를 보면 아래와 같이 한번 ``eval("2+2")``이 실행 됐을 때 이미 해당 eval 함수를 실행했던 상위 함수의 모든 코드를 가져오는걸 볼 수 있습니다.
 
-![/images/posts/wacon-final-writeup/eval_hooking_example.png](eval_hooking_example.png) 
+![eval_hooking_eaxmple.png](/images/posts/wacon-final-writeup/eval_hooking_example.png) 
 
 
 그렇다면 func.caller.toString()을 이용한다면 tester === 0 조건을 무시하더라도 이미 tester = 1을 실행하는 eval과 FLAG가 담겨 있는 eval과 같은 함수 위치에 있기 때문에
