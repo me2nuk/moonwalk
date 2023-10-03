@@ -42,7 +42,7 @@ tags: [CTF]
 </head>
 ```
 
-제공하는 파일 내용에서는 ``document.location.hash.slic(1)``으로 입력을 받을 수 있으며, ``greater than sign( < )`` , ``less than sign ( > )``을 replace 합니다.
+제공하는 파일 내용에서는 ``document.location.hash.slice(1)``으로 입력을 받을 수 있으며, ``greater than sign( < )`` , ``less than sign ( > )``을 replace 합니다.
 
 입력된 페이로드는 ``Function()`` 함수 안에 인자로 들어가고 만약 에러가 발생 된다면 catch 으로 넘어가, DOM XSS 취약점을 발생시킬 수 있도록 유도합니다.
 
@@ -451,9 +451,9 @@ function check_pow($input) {
 }
 ```
 
-해당 gen_pow 함수에서는 $nonce, $check 두개의 랜덤 값을 sha1 encrypt하여 $_SESSION["pow_answer"]에 넣어주는데, sha1은 이미 다른 값으로도 똑같은 해쉬를 만들어낼 수 있는 안전하지 않은 알고리즘입니다.
+해당 gen_pow 함수에서는 $nonce, $check 두개의 랜덤 값을 sha1 encrypt하여 $_SESSION["pow_answer"]에 넣어줍니다.
 
-때문에 ``sha1($_SESSION["pow_nonce"]. $input)``이 $_SESSION["pow_answer"]와 똑같은 해쉬가 나올 수 있도록 무차별 대입을 진행하면 됩니다.
+여기서 $check($input) 값이 5자 정도의 짧은 랜덤한 문자이기 때문에 ``sha1($_SESSION["pow_nonce"] . $input)``에서 $_SESSION["pow_answer"]와 똑같은 해쉬가 나올 수 있도록 무차별 대입을 진행하면 $check 값을 알아낼 수 있습니다.
 
 ```python
 import hashlib
