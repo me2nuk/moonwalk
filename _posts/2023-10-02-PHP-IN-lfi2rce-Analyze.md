@@ -699,11 +699,9 @@ filters += "convert.iconv.UTF8.UTF7|"
 
 예시를 들어보자면 아래와 같습니다. 
 
-```txt
-1. `--chain "a"` -> encoded_chain == base64_encode("a") // YQ
-2. base64_chain_table["Q"] == "convert.iconv.UTF8.CSISO2022KR|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.L6.UNICODE|convert.iconv.CP1282.ISO-IR-90|convert.iconv.CSA_T500-1983.UCS-2BE|convert.iconv.MIK.UCS2|convert.base64-decode" ==> "?? =>" // base64 table에 없는 이상한 문자
-3. convert.iconv.UTF8.CSISO2022KR|...|convert.iconv.MIK.UCS2|base64|convert.base64-decode|convert.base64-encode ==> "Q?????" // Q 의도한 문자 나옴
-```
+    1. `--chain "a"` -> encoded_chain == base64_encode("a") // YQ
+    2. base64_chain_table["Q"] == "convert.iconv.UTF8.CSISO2022KR|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.L6.UNICODE|convert.iconv.CP1282.ISO-IR-90|convert.iconv.CSA_T500-1983.UCS-2BE|convert.iconv.MIK.UCS2|convert.base64-decode" ==> "?? =>" // base64 table에 없는 이상한 문자
+    3. convert.iconv.UTF8.CSISO2022KR|...|convert.iconv.MIK.UCS2|base64|convert.base64-decode|convert.base64-encode ==> "Q?????" // Q 의도한 문자 나옴
 
 ##### --------------------------------
 
