@@ -180,93 +180,17 @@ php://filter/convert.iconv.UTF8.CSISO2022KR|convert.base64-encode|convert.iconv.
 
 이제부터, LFI2RCE가 PHP Filter Chain으로 부터 어떻게 발생되고, 이렇게 원하는 문자가 생성되는 원리는 무엇인지 더 깊게 확인해보겠습니다.
 
-먼저 iconv기능에서 저 자세하게 살펴보도록 하겠습니다. 
+#### Use encode variations to generate desired characters
+
+앞서, LFI2RCE의 핵심 부분은 PHP Filter이고, 그중에서 핵심은 PHP iconv Filter라고 설명하였습니다.
 
 ```text
 php://convert.iconv.<input-encoding>.<output-encoding> OR php://convert.iconv.<input-encoding>/<output-encoding>
 ```
 
-앞서 설명하였듯이 iconv는 php filter를 사용하게 된다면 리눅스 명령어인 iconv로 엑세스됩니다, 그리고 사용 방법은 <input-encoding>에 들어간 인코딩을 <output-encoding>으로 변형해서 출력해주게 됩니다.
+위에처럼 php iconv filter를 사용하게 된다면 리눅스 명령어인 iconv로 엑세스됩니다, 그리고 사용 방법은 `<input-encoding>`에 들어간 인코딩을 `<output-encoding>`으로 변형해서 출력해주게 됩니다.
 
-#### Remove incompatible characters
-
-iconv 인코딩을 통해 생성된 데이터에는 올바르게 인코딩이 된 문자도 분명 존재하겠지만, 다양한 인코딩이 체이닝되게 된다면 이에서 발생하는 쓰레기 문자나 호환되지 않는 정크 문자들도 존재하게 될 것입니다.
-
-정크 문자나 쓰레기 문자를 제어하기 위해서는 base64를 사용할 수 있습니다.
-
-base64를 사용하게 된다면 아래와 같은 경우를 유심하게 살펴보아야 합니다.
-
-```php
-// test.txt
-aGVsbG8
-//
-
-<?php
-    echo file_get_contents("php://filter/convert.base64-decode/resource=test.txt");
-
-    // result == "hello"
-?>
-
-// test2.txt
-@_>aGVsbG8
-//
-
-<?php
-    echo file_get_contents("php://filter/convert.base64-decode/resource=test2.txt");
-
-    // result == "hello"
-?>
-```
-
-위와 같이 "@_>" 문자열을 앞에 추가할 경우 아래와 같이 base64 테이블에 존재하지 않는 문자를 디코드하려고했기 때문에 오류가 발생하거나 문제가 발생해야합니다.
-
-![Alt text](../images/posts/php-in-lfi2rce-analyze/bad_base64.png){: width="100%" height="100%"}
-
-하지만 "test2.txt"를 디코드한 결과를 보면 base64 테이블에 없는 문자를 디코드하려고 해도, 이를 그냥 디코딩해주는 것을 확인할 수 있습니다, 이는 PHP에서 오류가 발생해도 이를 무시한다는 것의 증명입니다.
-
-그렇다면, base64를 사용하게 된다면 문제가 발생하는 문자도 그냥 무시하고 인코드/디코드를 진행하기 때문에 공격에서 배우 유용하게 사용될 수 있습니다.
-
-그런데 이러한 PHP base64-decode에서 유일하게 오류가 발생하는 경우가 존재합니다, 특이하지만 아래의 예시를 통해 볼 수 있습니다.
-
-```php
-<?php
-    echo base64_decode("aGV==sbG8");
-
-    // result == "hello"
-?>
-
-// test2.txt
-aGV==sbG8
-//
-
-<?php
-    echo file_get_contents("php://filter/convert.base64-decode/resource=test2.txt");
-
-    // result == "Warning: file_get_contents(): stream filter (convert.base64-decode): invalid byte sequence in Command line code on line 1"
-?>
-```
-
-위와 같이 base64 문자 사이에 등호가 존재할 경우 PHP 내장 함수인 base64_decode함수는 정상적으로 디코딩을 수행하지만 PHP base64-decode Filter에서는 무슨 이유에서인지 오류를 발생시키고 디코딩을 수행하지 않습니다.
-
-그래서 base64-decode를 수행하기 전에 사전에 등호를 제거하는 인코딩이 필요합니다, 현재까지 알려진 방법으로는 base64-encode 문자를 UTF7로 인코딩하는 방법입니다. UTF7 인코딩으로 문자를 변환하게 된다면 등호를 인식하지 못하고 정상적으로 디코딩을 진행합니다.
-
-```php
-// test2.txt
-aGVsbG8==
-//
-
-<?php
-    echo file_get_contents("php://filter/convert.iconv.UTF8.UTF7|convert.base64-decode/resource=test2.txt");
-
-    // result == "hello���"
-?>
-```
-
-등호 문제를 해결하였음으로 이제 PHP Filter Chain을 통해 특정 문자를 생성할 수 있습니다.
-
-#### Use encode variations to generate desired characters
-
-PHP Filter Chain을 이용해 특정 문자를 생성하기 위해서는 기본적으로 어떠한 초기 문자라도 일단 존재해야합니다.
+iconv PHP Filter Chain 이용하여 특정 문자를 생성하기 위해서는 기본적으로 어떠한 초기 문자라도 일단 존재해야합니다.
 
 다양한 인코딩 테이블 중 여기서 눈여겨볼 인코딩 테이블은 한국어 문자 인코딩(ISO-2022-KR)입니다. 해당 인코딩은 RFC:[RFC-1557]이라는 부분에 명시되어 있습니다.
 
@@ -305,7 +229,7 @@ RFC 규약에 명시되어 있듯이 문자가 ISO-2022-KR(한국어 인코딩)�
 위에 명시된 3개의 인코딩만이 문자 앞에 식별자가 붙는 인코딩입니다. 문자 앞에 식별자가 무조건 붙는다는 말은 이를 초기 문자로 지정하고 다른 인코딩을 체이닝하여 원하는 문자를 만들 수 있다는 말이 됩니다.
 
 인코딩을 변환하려면 거의 7000개가 넘는 인코딩을 직접 체인해보면서 어떤 문자가 만들어지는지 알아야합니다, 하지만 여기서 다루게되면 글이 너무나 길어짐으로 "b" 문자를 PHP Filter Chain으로 만드는 방법만 간단하게 확인해보겠습니다.
-)
+
 ![ref: https://www.synacktiv.com/en/publications/php-filters-chain-what-is-it-and-how-to-use-it](https://www.synacktiv.com/sites/default/files/inline-images/prepend_characterb_not_working.png){: width="100%" height="100%"}
 
     사진 출처 : https://www.synacktiv.com/en/publications/php-filters-chain-what-is-it-and-how-to-use-it
@@ -318,9 +242,85 @@ RFC 규약에 명시되어 있듯이 문자가 ISO-2022-KR(한국어 인코딩)�
 
 나중에 언급하겠지만 앞서 설명했던 도구(PHP Filter Chain Generator)에 Table에서는 체인이 무결성을 망가뜨리지 않고 원하는 문자를 생성시킵니다.
 
+#### Remove incompatible characters
+
+위에서 iconv 인코딩 체이닝을 통해 생성된 문자에는 올바르게 인코딩이 된 문자도 분명 존재하겠지만, 쓰레기 문자나 호환되지 않는 정크 문자들도 존재할 것 입니다.
+
+정크 문자나 쓰레기 문자는 다른 체이닝한 문자와 합쳐질 경우 호환이 되지 않아 문제를 발생시킬 수 있기 떄문에 이를 제어하고 제거하기 위한 방법이 필요하고, 방법으로는 base64를 사용할 수 있습니다.
+
+base64는 특이한 점이 몇가지 존재합니다.
+
+```php
+// test.txt
+aGVsbG8
+//
+
+<?php
+    echo file_get_contents("php://filter/convert.base64-decode/resource=test.txt");
+
+    // result == "hello"
+?>
+
+// test2.txt
+@_>aGVsbG8
+//
+
+<?php
+    echo file_get_contents("php://filter/convert.base64-decode/resource=test2.txt");
+
+    // result == "hello"
+?>
+```
+
+위와 같이 "@_>" 문자열을 앞에 추가할 경우 아래와 같이 base64 테이블에 존재하지 않는 문자를 디코드하려고했기 때문에 오류가 발생하거나 문제가 발생해야합니다.
+
+![Alt text](../images/posts/php-in-lfi2rce-analyze/bad_base64.png){: width="100%" height="100%"}
+
+하지만 "test2.txt"를 디코드한 결과를 보면 base64 테이블에 없는 문자를 디코드하려고 해도, 이를 그냥 디코딩해주는 것을 확인할 수 있습니다, 이는 PHP에서 오류가 발생해도 이를 무시한다는 것의 증명입니다.
+
+그렇다면, base64를 사용하게 된다면 문제가 발생하는 문자도 그냥 무시하고 인코드/디코드를 진행하기 때문에 공격에서 매우 유용하게 사용될 수 있습니다.
+
+그런데 이러한 PHP base64-decode에서 유일하게 오류가 발생하는 경우가 존재합니다, 특이하지만 아래의 예시를 통해 볼 수 있습니다.
+
+```php
+<?php
+    echo base64_decode("aGV==sbG8");
+
+    // result == "hello"
+?>
+
+// test2.txt
+aGV==sbG8
+//
+
+<?php
+    echo file_get_contents("php://filter/convert.base64-decode/resource=test2.txt");
+
+    // result == "Warning: file_get_contents(): stream filter (convert.base64-decode): invalid byte sequence in Command line code on line 1"
+?>
+```
+
+위와 같이 base64 문자 사이에 등호가 존재할 경우 PHP 내장 함수인 base64_decode함수는 정상적으로 디코딩을 수행하지만 PHP base64-decode Filter에서는 무슨 이유에서인지 오류를 발생시키고 디코딩을 수행하지 않습니다.
+
+그래서 base64-decode를 수행하기 전에 사전에 등호를 제거하는 인코딩이 필요합니다, 현재까지 알려진 방법으로는 base64-encode 문자를 UTF7로 인코딩하는 방법입니다. UTF7 인코딩으로 문자를 변환하게 된다면 등호를 인식하지 못하고 정상적으로 디코딩을 진행합니다.
+
+```php
+// test2.txt
+aGVsbG8==
+//
+
+<?php
+    echo file_get_contents("php://filter/convert.iconv.UTF8.UTF7|convert.base64-decode/resource=test2.txt");
+
+    // result == "hello���"
+?>
+```
+
+등호 문제를 해결하였음으로 이제 PHP Filter Chain을 통해 원하는 문자를 생성할때 발생하는 정크 문자를 제거할 수 있습니다.
+
 #### Using php://temp to access a valid path
 
-이제 원하는 문자를 생성할 수 있는 방법이 존재하니 RCE를 수행할 수 있을것 같지만, 한가지 문재가 존재합니다.
+원하는 문자를 생성하고 제어할 수 있는 방법이 존재하니 RCE를 수행할 수 있을것 같지만, 한가지 문제가 존재합니다.
 
 LFI 취약점에서는 서버의 구조를 알 수 없기 때문에 PHP Filter resource 부분에 로드할 유효한 파일을 찾아야합니다.
 
@@ -341,13 +341,13 @@ php://filter/convert.base64-decode/resource=php://temp
 LFI2RCE가 발생하는 원리를 모두 정리해보면 아래와 같습니다.
 
 1. `include`, `require` 등의 PHP 파일 로드 함수에서 LFI 취약점이 발생할 경우 RCE가 트리거 될 수 있음.
-2. php filter에서 resource에 들어갈 로드 할 수 있는 유효한 경로의 파일 경로가 들어가야하는데, `php://temp`를 사용하게 되면 /tmp 경로의 랜덤한 파일명으로 읽기/쓰기 권한이 존재하는 파일을 생성해주기 때문에 이를 먼저 진행하여 경로를 설정함.
 2. ISO-20222-KR 등과 같은 문자 앞에 붙는 특수한 식별 문자를 다양한 인코딩과 체이닝하여 원하는 문자를 생성할 수 있는 PHP Filter Chain을 만들어낼 수 있음. (Chain Table : PHP Filter Chain Generator Tool)
 3. PHP Filter Chain에서 생성된 문자는 생성된 값도 나오지만 유효하지 않은 문자나 정크 문자가 만들어질 수 있음.
 4. 여기서 base64 encoding 을 사용하고 base64-decode하게 된다면 유효하지 않는 문자가 존재하여도 오류를 무시하고 만들어진 쓰레기 문자를 지우기 때문에 원하는 문자만 가져올 수 있음.
 5. 그런데 php filter의 base64-decode 같은 경우는 encode 문자에서 등호가 존재할 경우 이를 인식하지 못하고 문제가 발생하게 됨.
 6. base64 문자를 UTF7로 변환한 후 base64-decode하게 되면 등호를 제거할 수 있음.
-7. 최종적으로 생성된 PHP WebShell Code가 `include` 함수 등에서 사용되면 PHP코드임으로 바로 실행하기 때문에 RCE가 트리거 됨.
+7. 이렇게 생성된 php filter chain에서 resource 부분에 들어갈 로드 할 수 있는 유효한 경로의 파일 경로가 들어가야하는데, `php://temp`를 사용하게 되면 /tmp 경로의 랜덤한 파일명으로 읽기/쓰기 권한이 존재하는 파일을 생성해주기 때문에 최종 페이로드를 완성 시킴
+8. 완성된 PHP WebShell Code가 `include` 함수 등에서 사용되면 PHP 코드임으로 바로 실행하기 때문에 RCE가 트리거 됨.
 
 ### Analyzing PHP Filter Generator tool code
 
@@ -620,10 +620,10 @@ def generate_filter_chain(chain, debug_base64 = False):
 
 초기 값 생성이 끝나면 초기에 정의한 php filter chain base64 table을 사용해 1문자씩 일치하는 filter chain을 찾아 추가하는 것을 볼 수 있습니다. 여기서 유심히 볼 2가지가 존재합니다. 
 
-1. encoded_chain 문자를 역순으로 넣어주는 이유
-2. 매핑된 php filter chain에서 base64-decode, base64-encode를 진행하는 이유
+1. encoded_chain 문자를 역순으로 넣어주는 이유 (Why do we put encoded_chain characters in reverse order)
+2. 매핑된 php filter chain에서 base64-decode, base64-encode를 진행하는 이유 (Why base64-decode, base64-encode in a mapped php filter chain)
 
-#### encoded_chain 문자를 역순으로 넣어주는 이유
+#### Why do we put encoded_chain characters in reverse order
 
 encoded_chain 문자를 역순으로 넣어주는 이유는 filter chain을 추가하고 해석할때 오른쪽부터 해석하는 것이 아닌 왼쪽부터 해석하기 때문입니다.
 
@@ -657,7 +657,7 @@ base64_chain_table["Y"] + base64_chain_table["Q"]
 
 그러면 "Q"의 필터 체인이 먼저 붙게 되고, 그 이후에 왼쪽부터 값이 붙으니, "Y" 필터 체인 값이 붙게 됩니다, 결과적으로 "YQ"가 됩니다. 
 
-#### 매핑된 php filter chain에서 base64-decode, base64-encode를 진행하는 이유
+#### Why base64-decode, base64-encode in a mapped php filter chain
 
 특정 문자와 php filter chain이 매핑되어 filter 변수에 값이 추가되면 추가적으로 아래의 코드가 더 추가됩니다.
 
