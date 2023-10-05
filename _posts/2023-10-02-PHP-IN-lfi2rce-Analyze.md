@@ -220,7 +220,7 @@ aGVsbG8
 
 위와 같이 "@_>" 문자열을 앞에 추가할 경우 아래와 같이 base64 테이블에 존재하지 않는 문자를 디코드하려고했기 때문에 오류가 발생하거나 문제가 발생해야합니다.
 
-![Alt text](../images/posts/php-in-lfi2rce-analyze/bad_base64.png)
+![Alt text](../images/posts/php-in-lfi2rce-analyze/bad_base64.png){: width="100%" height="100%"}
 
 하지만 "test2.txt"를 디코드한 결과를 보면 base64 테이블에 없는 문자를 디코드하려고 해도, 이를 그냥 디코딩해주는 것을 확인할 수 있습니다, 이는 PHP에서 오류가 발생해도 이를 무시한다는 것의 증명입니다.
 
@@ -306,7 +306,7 @@ RFC 규약에 명시되어 있듯이 문자가 ISO-2022-KR(한국어 인코딩)�
 
 인코딩을 변환하려면 거의 7000개가 넘는 인코딩을 직접 체인해보면서 어떤 문자가 만들어지는지 알아야합니다, 하지만 여기서 다루게되면 글이 너무나 길어짐으로 "b" 문자를 PHP Filter Chain으로 만드는 방법만 간단하게 확인해보겠습니다.
 )
-![ref: https://www.synacktiv.com/en/publications/php-filters-chain-what-is-it-and-how-to-use-it](https://www.synacktiv.com/sites/default/files/inline-images/prepend_characterb_not_working.png)
+![ref: https://www.synacktiv.com/en/publications/php-filters-chain-what-is-it-and-how-to-use-it](https://www.synacktiv.com/sites/default/files/inline-images/prepend_characterb_not_working.png){: width="100%" height="100%"}
 
     사진 출처 : https://www.synacktiv.com/en/publications/php-filters-chain-what-is-it-and-how-to-use-it
 
