@@ -3,6 +3,7 @@ layout: post
 author: me2nuk
 title: Cyber Security Challenge 2023 Quals CTF Writeup
 tags: [CTF,C#]
+toc: true
 ---
 
 # Building Management System / Smart Building

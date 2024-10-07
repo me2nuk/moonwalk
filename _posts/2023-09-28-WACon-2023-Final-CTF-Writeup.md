@@ -1,8 +1,9 @@
 ---
 layout: post
-author: jun0911, me2nuk
+author: jun0911
 title: WACon 2023 Final CTF Writeup
 tags: [CTF]
+toc: true
 ---
 
 # [WEB] funnyjs

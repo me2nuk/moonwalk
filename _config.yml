@@ -1,6 +1,6 @@
 title: Web Analyzer
 author: me2nuk
-url: https://web.analyzer.me2nuk.com/ # root address of the site
+url: https://analyzer.me2nuk.com/ # root address of the site
 description: > # description of the site (multiple lines allowed)
   I like to analyze all web services, I am interested in web 3 security.
 
@@ -49,3 +49,8 @@ sass:
 plugins:
   - jekyll-feed
   - jekyll-soopr-seo-tag
+  - jekyll-toc
+
+toc:
+  min_level: 1 # default: 1
+  max_level: 3 # default: 6
